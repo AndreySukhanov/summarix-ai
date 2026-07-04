@@ -1,4 +1,4 @@
-<h1 align="center">🤖 AI Telegram Bot Boilerplate</h1>
+<h1 align="center">🤖 Summarix AI — Telegram Bot Boilerplate</h1>
 
 <p align="center">
   <a href="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml"><img src="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
