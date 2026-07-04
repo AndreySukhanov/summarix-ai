@@ -1,0 +1,23 @@
+# Bot
+aiogram==3.17.0
+
+# AI
+openai==1.59.6
+
+# Database
+SQLAlchemy==2.0.36
+asyncpg==0.30.0
+aiosqlite==0.20.0
+psycopg2-binary==2.9.10
+
+# Config
+pydantic-settings==2.7.1
+
+# Infra
+redis==5.2.1
+celery==5.4.0
+
+# Tests & lint
+pytest==8.3.4
+pytest-asyncio==0.25.2
+flake8==7.1.1
