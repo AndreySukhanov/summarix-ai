@@ -1,7 +1,7 @@
 <h1 align="center">🤖 AI Telegram Bot Boilerplate</h1>
 
 <p align="center">
-  <a href="https://github.com/AndreySukhanov/ai-telegram-bot-boilerplate/actions/workflows/ci.yml"><img src="https://github.com/AndreySukhanov/ai-telegram-bot-boilerplate/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml"><img src="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <img src="https://img.shields.io/badge/python-3.13-blue" alt="Python 3.13"/>
   <img src="https://img.shields.io/badge/aiogram-3.x-2CA5E0" alt="aiogram 3"/>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"/>
@@ -40,8 +40,8 @@ Every AI bot needs the same boring 90%: users, quotas, payments, referrals, rate
 **2. Run:**
 
 ```bash
-git clone https://github.com/AndreySukhanov/ai-telegram-bot-boilerplate.git
-cd ai-telegram-bot-boilerplate
+git clone https://github.com/AndreySukhanov/summarix-ai.git
+cd summarix-ai
 cp .env.example .env        # paste your 3 keys
 docker-compose up -d
 ```
