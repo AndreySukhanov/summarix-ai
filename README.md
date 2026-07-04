@@ -1,5 +1,6 @@
-<h1 align="center">🤖 Summarix AI</h1>
-<h3 align="center">Production-ready boilerplate for monetized AI Telegram bots</h3>
+<p align="center">
+  <img src="docs/banner.png" alt="Summarix AI — production-ready boilerplate for monetized AI Telegram bots" width="100%"/>
+</p>
 
 <p align="center">
   <a href="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml"><img src="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
