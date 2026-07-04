@@ -115,4 +115,4 @@ pytest        # no DB, no Redis, no network — runs anywhere
 
 ## License
 
-[MIT](LICENSE). Built from a production bot ([Summarix](https://github.com/AndreySukhanov/summarix_ai)). If this saved you a week of plumbing — a ⭐ says thanks.
+[MIT](LICENSE). Built from a production bot ([Summarix](https://github.com/AndreySukhanov/summarix-bot)). If this saved you a week of plumbing — a ⭐ says thanks.

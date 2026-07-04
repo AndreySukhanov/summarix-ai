@@ -6,6 +6,7 @@ openai==1.59.6
 
 # Database
 SQLAlchemy==2.0.36
+greenlet==3.1.1
 asyncpg==0.30.0
 aiosqlite==0.20.0
 psycopg2-binary==2.9.10
