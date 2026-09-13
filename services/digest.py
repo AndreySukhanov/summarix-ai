@@ -183,7 +183,7 @@ class DigestService:
                 name = html.escape(s.channel.title, quote=False)
                 if s.channel.username:
                     name = f'<a href="https://t.me/{s.channel.username}">{name}</a>'
-                parts += ["", f"<b>{name}</b>", link_refs(s.summary, s.posts)]
+                parts += ["", f"➡️ <b>{name}</b>", link_refs(s.summary, s.posts)]
         if result.errors:
             parts += ["", t(self.lang, "failed_channels", items=html.escape(", ".join(result.errors), quote=False))]
         return "\n".join(parts)
