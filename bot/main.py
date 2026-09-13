@@ -100,7 +100,7 @@ async def main() -> None:
 
 async def set_commands(bot: Bot) -> None:
     """The "/" menu in Telegram, in each interface language."""
-    names = ["digest", "channels", "add", "settings", "status", "help"]
+    names = ["start", "digest", "channels", "add", "settings", "status", "help"]
     for lang in UI_LANGUAGES:
         commands = [BotCommand(command=name, description=t(lang, f"cmd_{name}")) for name in names]
         await bot.set_my_commands(commands, language_code=None if lang == "en" else lang)

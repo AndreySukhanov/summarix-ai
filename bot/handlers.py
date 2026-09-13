@@ -5,6 +5,7 @@ only the owner gets this far (OwnerOnly).
 import html
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -21,41 +22,84 @@ from aiogram.types import (
     MessageOriginChannel,
 )
 
-from bot.keyboards import DIGEST_WINDOWS, button_texts, channels_keyboard, digest_menu, grid, main_menu
+from bot.keyboards import (
+    DIGEST_WINDOWS,
+    button_texts,
+    delete_confirm_keyboard,
+    digest_menu,
+    digest_period_menu,
+    grid,
+    group_keyboard,
+    group_title,
+    groups_keyboard,
+    main_menu,
+)
 from bot.texts import t
 from database.db import (
     SessionMaker,
-    add_channel,
+    add_to_group,
+    delete_group,
+    folder_group,
+    get_group,
     get_settings,
+    group_channels,
     last_run,
     list_channels,
+    list_groups,
+    manual_group,
     remove_channel,
+    remove_from_group,
     update_settings,
 )
-from services.styles import STYLES, style_title
-from services.digest import DigestService
+from services.digest import DigestResult, DigestService
 from services.reader import Reader, ReaderError
 from services.refs import ChannelRef, RefError, parse_channel_ref
 from services.scheduler import next_run_at
+from services.styles import STYLES, style_title
 
 logger = logging.getLogger(__name__)
 
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 _REF_IN_TEXT = re.compile(r"(?:https?://)?(?:t\.me|telegram\.me)/\S+|@[A-Za-z][A-Za-z0-9_]{3,31}", re.I)
+PENDING_TTL_S = 15 * 60
 
 
 def extract_refs(text: str | None) -> list[str]:
     return _REF_IN_TEXT.findall(text or "")
 
 
-async def send_digest(bot: Bot, chat_id: int, service: DigestService, *, window_hours: int | None, trigger: str) -> None:
-    """Build, deliver, and only then mark posts read."""
+async def send_digest(
+    bot: Bot,
+    chat_id: int,
+    service: DigestService,
+    *,
+    window_hours: int | None,
+    trigger: str,
+    group_id: int | None = None,
+) -> None:
+    """One digest per group (group_id=None: every group that has channels).
+    Each is delivered and only then its posts are marked read. Groups with nothing new stay silent,
+    unless every group is silent - then one "no new posts" message."""
     async with service.lock:
-        result = await service.build(window_hours=window_hours)
-        for chunk in result.messages:
-            await bot.send_message(chat_id, chunk, link_preview_options=NO_PREVIEW)
-        await service.commit(result, trigger)
-        _save_last_digest(result.messages)
+        async with service.sessions() as db:
+            groups = [g for g, n in await list_groups(db) if n and (group_id is None or g.id == group_id)]
+        sent: list[str] = []
+        quiet: DigestResult | None = None
+        for group in groups:
+            result = await service.build(window_hours=window_hours, group_id=group.id)
+            if result.channels_with_news == 0 and not result.errors and (group_id is None or len(groups) > 1):
+                quiet = quiet or result
+                continue
+            for chunk in result.messages:
+                await bot.send_message(chat_id, chunk, link_preview_options=NO_PREVIEW)
+            sent.extend(result.messages)
+            await service.commit(result, trigger)
+        if not sent:
+            fallback = quiet.messages if quiet else (await service.build(window_hours=window_hours)).messages
+            for chunk in fallback:
+                await bot.send_message(chat_id, chunk, link_preview_options=NO_PREVIEW)
+            sent = fallback
+        _save_last_digest(sent)
 
 
 def _save_last_digest(messages: list[str]) -> None:
@@ -70,6 +114,14 @@ def _save_last_digest(messages: list[str]) -> None:
 
 def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestService, defaults: dict, model: str) -> Router:
     router = Router()
+    # "➕ Add here" in a group: the next links go to that group for a while
+    pending: dict[str, float | int] = {}
+
+    def pending_group_id() -> int | None:
+        if pending and time.monotonic() < pending["until"]:
+            return int(pending["group_id"])
+        pending.clear()
+        return None
 
     # ---- adding channels ----
 
@@ -80,9 +132,14 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
             await message.answer(t(lang, "add_failed", ref=html.escape(shown), reason=html.escape(str(exc))))
             return
         async with sessions() as db:
-            channel, created = await add_channel(db, info.peer_id, info.title, info.username)
+            target = pending_group_id()
+            group = (await get_group(db, target) if target else None) or await manual_group(db)
+            channel, created = await add_to_group(db, group, info.peer_id, info.title, info.username)
             await db.commit()
-        await message.answer(t(lang, "added" if created else "already", title=html.escape(channel.title)))
+        key = "added_to" if created else "already_in"
+        await message.answer(
+            t(lang, key, group=html.escape(group_title(group, lang)), title=html.escape(channel.title))
+        )
 
     async def add_folder(message: Message, lang: str, slug: str, shown: str) -> None:
         try:
@@ -92,12 +149,13 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
             return
         added = existing = 0
         async with sessions() as db:
+            group = await folder_group(db, slug, folder.title)
             for info in folder.channels:
-                _, created = await add_channel(db, info.peer_id, info.title, info.username)
+                _, created = await add_to_group(db, group, info.peer_id, info.title, info.username)
                 added += created
                 existing += not created
             await db.commit()
-        lines = [t(lang, "folder_added", title=html.escape(folder.title or slug), added=added, existing=existing)]
+        lines = [t(lang, "folder_added", title=html.escape(group.title), added=added, existing=existing)]
         if folder.skipped:
             lines.append(t(lang, "folder_skipped", items=html.escape(", ".join(folder.skipped))))
         await message.answer("\n".join(lines))
@@ -124,6 +182,7 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
 
     @router.message(F.text.in_(button_texts("menu_add")))
     async def btn_add(message: Message, lang: str) -> None:
+        pending.clear()  # the plain "Add" button means "my channels"
         await message.answer(t(lang, "add_prompt"))
 
     @router.message(F.forward_origin.as_("origin"))
@@ -140,40 +199,94 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
             prefs = await get_settings(db, defaults)
         await message.answer(t(lang, "help", time=prefs.digest_time, tz=prefs.timezone), reply_markup=main_menu(lang))
 
-    # ---- channels ----
+    # ---- groups and channels ----
 
-    async def channels_view(lang: str, page: int) -> tuple[str, Any]:
+    async def groups_view(lang: str) -> tuple[str, Any]:
         async with sessions() as db:
-            channels = await list_channels(db)
-        if not channels:
+            groups = [(g, n) for g, n in await list_groups(db) if n or g.kind == "manual"]
+        if not any(n for _, n in groups):
             return t(lang, "no_channels"), None
-        text = t(lang, "channels_header", count=len(channels)) + "\n" + t(lang, "channels_hint")
-        return text, channels_keyboard(channels, page)
+        return t(lang, "groups_header", count=len(groups)), groups_keyboard(groups, lang)
+
+    async def group_view(lang: str, group_id: int, page: int) -> tuple[str, Any]:
+        async with sessions() as db:
+            group = await get_group(db, group_id)
+            if group is None:
+                return await groups_view(lang)
+            channels = await group_channels(db, group_id)
+        title = html.escape(group_title(group, lang))
+        text = (
+            t(lang, "group_header", title=title, count=len(channels))
+            if channels
+            else t(lang, "group_empty", title=title)
+        )
+        return text, group_keyboard(group, channels, page, lang)
 
     @router.message(Command("channels"))
     @router.message(F.text.in_(button_texts("menu_channels")))
     async def cmd_channels(message: Message, lang: str) -> None:
-        text, kb = await channels_view(lang, 0)
+        text, kb = await groups_view(lang)
         await message.answer(text, reply_markup=kb)
 
-    @router.callback_query(F.data.startswith("ch:"))
-    async def cb_channels_page(call: CallbackQuery, lang: str) -> None:
-        text, kb = await channels_view(lang, int(call.data.split(":")[1]))
+    @router.callback_query(F.data == "grps")
+    async def cb_groups(call: CallbackQuery, lang: str) -> None:
+        text, kb = await groups_view(lang)
         await call.message.edit_text(text, reply_markup=kb)
         await call.answer()
 
-    @router.callback_query(F.data.startswith("rm:"))
-    async def cb_remove(call: CallbackQuery, lang: str) -> None:
-        _, peer_id, page = call.data.split(":")
-        async with sessions() as db:
-            channels = {c.peer_id: c for c in await list_channels(db)}
-            target = channels.get(int(peer_id))
-            if target:
-                await remove_channel(db, target.peer_id)
-                await db.commit()
-        text, kb = await channels_view(lang, int(page))
+    @router.callback_query(F.data.startswith("grp:"))
+    async def cb_group(call: CallbackQuery, lang: str) -> None:
+        _, group_id, page = call.data.split(":")
+        text, kb = await group_view(lang, int(group_id), int(page))
         await call.message.edit_text(text, reply_markup=kb)
-        await call.answer(t(lang, "removed", title=target.title).replace("<b>", "").replace("</b>", "") if target else "")
+        await call.answer()
+
+    @router.callback_query(F.data.startswith("rmg:"))
+    async def cb_remove_from_group(call: CallbackQuery, lang: str) -> None:
+        _, group_id, channel_id, page = call.data.split(":")
+        async with sessions() as db:
+            channel = await remove_from_group(db, int(group_id), int(channel_id))
+            await db.commit()
+        text, kb = await group_view(lang, int(group_id), int(page))
+        await call.message.edit_text(text, reply_markup=kb)
+        await call.answer(t(lang, "removed", title=channel.title).replace("<b>", "").replace("</b>", "") if channel else "")
+
+    @router.callback_query(F.data.startswith("gadd:"))
+    async def cb_group_add(call: CallbackQuery, lang: str) -> None:
+        group_id = int(call.data.split(":")[1])
+        async with sessions() as db:
+            group = await get_group(db, group_id)
+        if group is None:
+            await call.answer()
+            return
+        pending.update(group_id=group_id, until=time.monotonic() + PENDING_TTL_S)
+        await call.message.answer(t(lang, "group_add_prompt", title=html.escape(group_title(group, lang))))
+        await call.answer()
+
+    @router.callback_query(F.data.startswith("gdel:"))
+    async def cb_group_delete(call: CallbackQuery, lang: str) -> None:
+        async with sessions() as db:
+            group = await get_group(db, int(call.data.split(":")[1]))
+        if group is None:
+            await call.answer()
+            return
+        await call.message.edit_text(
+            t(lang, "group_delete_confirm", title=html.escape(group_title(group, lang))),
+            reply_markup=delete_confirm_keyboard(group, lang),
+        )
+        await call.answer()
+
+    @router.callback_query(F.data.startswith("gdelok:"))
+    async def cb_group_delete_ok(call: CallbackQuery, lang: str) -> None:
+        async with sessions() as db:
+            group = await delete_group(db, int(call.data.split(":")[1]))
+            await db.commit()
+        if group is not None:
+            pending.clear()
+            await call.message.answer(t(lang, "group_deleted", title=html.escape(group_title(group, lang))))
+        text, kb = await groups_view(lang)
+        await call.message.edit_text(text, reply_markup=kb)
+        await call.answer()
 
     @router.message(Command("remove"))
     async def cmd_remove(message: Message, command: CommandObject, lang: str) -> None:
@@ -181,9 +294,7 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
         async with sessions() as db:
             channels = await list_channels(db)
             target = None
-            if arg.isdigit() and 1 <= int(arg) <= len(channels):
-                target = channels[int(arg) - 1]
-            elif arg:
+            if arg:
                 try:
                     ref = parse_channel_ref(arg)
                     target = next(
@@ -201,32 +312,38 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
 
     # ---- digest ----
 
-    async def run_digest(bot: Bot, chat_id: int, lang: str, answer, window: int | None) -> None:
+    async def run_digest(bot: Bot, chat_id: int, lang: str, answer, window: int | None, group_id: int | None) -> None:
         if service.lock.locked():
             await answer(t(lang, "busy"))
             return
         await answer(t(lang, "collecting"))
         try:
-            await send_digest(bot, chat_id, service, window_hours=window, trigger="manual")
+            await send_digest(bot, chat_id, service, window_hours=window, trigger="manual", group_id=group_id)
         except Exception as exc:
             logger.exception("manual digest failed")
             await answer(t(lang, "error", reason=html.escape(str(exc))))
+
+    async def digest_keyboard(lang: str) -> InlineKeyboardMarkup:
+        async with sessions() as db:
+            prefs = await get_settings(db, defaults)
+            groups = await list_groups(db)
+        style = style_title(prefs.style, lang) + (" ✍️" if prefs.custom_prompt else "")
+        return digest_menu(lang, style, groups)
 
     @router.message(Command("digest"))
     async def cmd_digest(message: Message, command: CommandObject, bot: Bot, lang: str) -> None:
         arg = (command.args or "").strip()
         window = int(arg) if arg.isdigit() and int(arg) > 0 else None
-        await run_digest(bot, message.chat.id, lang, message.answer, window)
+        await run_digest(bot, message.chat.id, lang, message.answer, window, None)
 
     @router.message(F.text.in_(button_texts("menu_digest")))
     async def btn_digest(message: Message, lang: str) -> None:
-        await message.answer(t(lang, "digest_choose"), reply_markup=await digest_keyboard(lang))
+        await message.answer(t(lang, "digest_choose_group"), reply_markup=await digest_keyboard(lang))
 
-    async def digest_keyboard(lang: str) -> InlineKeyboardMarkup:
-        async with sessions() as db:
-            prefs = await get_settings(db, defaults)
-        style = style_title(prefs.style, lang) + (" ✍️" if prefs.custom_prompt else "")
-        return digest_menu(lang, style)
+    @router.callback_query(F.data == "dgm")
+    async def cb_digest_main(call: CallbackQuery, lang: str) -> None:
+        await call.message.edit_text(t(lang, "digest_choose_group"), reply_markup=await digest_keyboard(lang))
+        await call.answer()
 
     @router.callback_query(F.data == "dg:style")
     async def cb_digest_styles(call: CallbackQuery, lang: str) -> None:
@@ -240,17 +357,35 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
         if key in STYLES:
             async with sessions() as db:
                 await update_settings(db, defaults, style=key, custom_prompt=None)
-        await call.message.edit_text(t(lang, "digest_choose"), reply_markup=await digest_keyboard(lang))
+        await call.message.edit_text(t(lang, "digest_choose_group"), reply_markup=await digest_keyboard(lang))
         await call.answer()
 
-    @router.callback_query(F.data.startswith("dg:"))
-    async def cb_digest(call: CallbackQuery, bot: Bot, lang: str) -> None:
-        key = call.data.split(":", 1)[1]
+    @router.callback_query(F.data.startswith("dgg:"))
+    async def cb_digest_group(call: CallbackQuery, lang: str) -> None:
+        group_id = int(call.data.split(":")[1])
+        title = t(lang, "btn_all_groups")
+        if group_id:
+            async with sessions() as db:
+                group = await get_group(db, group_id)
+            if group is None:
+                await call.answer()
+                return
+            title = group_title(group, lang)
+        await call.message.edit_text(
+            t(lang, "digest_choose_period", title=html.escape(title)), reply_markup=digest_period_menu(lang, group_id)
+        )
+        await call.answer()
+
+    @router.callback_query(F.data.startswith("dgp:"))
+    async def cb_digest_period(call: CallbackQuery, bot: Bot, lang: str) -> None:
+        _, group_id, key = call.data.split(":")
         await call.answer()
         if key not in DIGEST_WINDOWS:
             return
         await call.message.edit_reply_markup(reply_markup=None)
-        await run_digest(bot, call.message.chat.id, lang, call.message.answer, DIGEST_WINDOWS[key])
+        await run_digest(
+            bot, call.message.chat.id, lang, call.message.answer, DIGEST_WINDOWS[key], int(group_id) or None
+        )
 
     # ---- status ----
 

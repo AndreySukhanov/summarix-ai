@@ -1,10 +1,10 @@
 """
-Three tables: the channels you follow, your settings, and a log of digest runs.
+Channels you follow, the groups they are sorted into, your settings, and a log of digest runs.
 Telegram peer IDs exceed int32, hence BigInteger.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -26,6 +26,27 @@ class Channel(Base):
     # Highest message id already included in a delivered digest; 0 = never read.
     last_message_id: Mapped[int] = mapped_column(BigInteger, default=0)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Group(Base):
+    """A set of channels with its own digest: one per shared folder, plus one for channels added by hand."""
+
+    __tablename__ = "groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))  # "manual" | "folder"
+    title: Mapped[str] = mapped_column(String(128), default="")  # empty for manual: localized at render time
+    folder_slug: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GroupChannel(Base):
+    """Membership. A channel can sit in several groups; it is read once per digest of each."""
+
+    __tablename__ = "group_channels"
+
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"), primary_key=True)
+    channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id"), primary_key=True)
 
 
 class BotSettings(Base):
