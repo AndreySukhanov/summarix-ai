@@ -28,9 +28,10 @@ def main_menu(lang: str) -> ReplyKeyboardMarkup:
     b = lambda key: KeyboardButton(text=t(lang, key))  # noqa: E731
     return ReplyKeyboardMarkup(
         keyboard=[
-            [b("menu_digest"), b("menu_channels")],
-            [b("menu_add"), b("menu_settings")],
-            [b("menu_status"), b("menu_help")],
+            [b("menu_digest"), b("menu_style")],
+            [b("menu_channels"), b("menu_add")],
+            [b("menu_settings"), b("menu_status")],
+            [b("menu_help")],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -39,6 +40,18 @@ def main_menu(lang: str) -> ReplyKeyboardMarkup:
 
 def grid(buttons: list[InlineKeyboardButton], per_row: int) -> list[list[InlineKeyboardButton]]:
     return [buttons[i : i + per_row] for i in range(0, len(buttons), per_row)]
+
+
+def styles_keyboard(lang: str, current: str, callback_prefix: str) -> InlineKeyboardMarkup:
+    from services.styles import STYLES, style_title
+
+    buttons = [
+        InlineKeyboardButton(
+            text=("✅ " if key == current else "") + style_title(key, lang), callback_data=f"{callback_prefix}{key}"
+        )
+        for key in STYLES
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=grid(buttons, 2))
 
 
 # ---- groups and channels ----
@@ -106,12 +119,13 @@ def digest_menu(lang: str, style: str, groups: list[tuple[Group, int]]) -> Inlin
     return InlineKeyboardMarkup(inline_keyboard=rows + grid(buttons, 2))
 
 
-def digest_period_menu(lang: str, group_id: int) -> InlineKeyboardMarkup:
+def digest_period_menu(lang: str, group_id: int, style: str) -> InlineKeyboardMarkup:
     b = lambda key, window: InlineKeyboardButton(  # noqa: E731
         text=t(lang, key), callback_data=f"dgp:{group_id}:{window}"
     )
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "btn_digest_style", style=style), callback_data="dg:style")],
             [b("btn_unread", "new")],
             [b("btn_24h", "24"), b("btn_48h", "48"), b("btn_7d", "168")],
             [InlineKeyboardButton(text=t(lang, "back"), callback_data="dgm")],
