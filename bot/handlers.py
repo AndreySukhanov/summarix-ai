@@ -62,6 +62,7 @@ logger = logging.getLogger(__name__)
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 _REF_IN_TEXT = re.compile(r"(?:https?://)?(?:t\.me|telegram\.me)/\S+|@[A-Za-z][A-Za-z0-9_]{3,31}", re.I)
 PENDING_TTL_S = 15 * 60
+LAST_DIGEST_PATH = Path("data/last_digest.txt")
 
 
 def extract_refs(text: str | None) -> list[str]:
@@ -105,9 +106,8 @@ async def send_digest(
 def _save_last_digest(messages: list[str]) -> None:
     """Local copy of the latest digest (data/ is git-ignored) - handy for tuning styles."""
     try:
-        path = Path("data/last_digest.txt")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n\n".join(messages), encoding="utf-8")
+        LAST_DIGEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+        LAST_DIGEST_PATH.write_text("\n\n".join(messages), encoding="utf-8")
     except OSError:
         logger.warning("could not save the last digest")
 
@@ -150,10 +150,13 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
         added = existing = 0
         async with sessions() as db:
             group = await folder_group(db, slug, folder.title)
+            mine = await manual_group(db)
             for info in folder.channels:
-                _, created = await add_to_group(db, group, info.peer_id, info.title, info.username)
+                channel, created = await add_to_group(db, group, info.peer_id, info.title, info.username)
                 added += created
                 existing += not created
+                # a channel that sat in "My channels" (e.g. from before groups existed) moves to its folder
+                await remove_from_group(db, mine.id, channel.id)
             await db.commit()
         lines = [t(lang, "folder_added", title=html.escape(group.title), added=added, existing=existing)]
         if folder.skipped:
