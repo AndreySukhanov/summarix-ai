@@ -1,3 +1,6 @@
+from datetime import datetime, timedelta, timezone
+
+import pytest
 import pytest_asyncio
 
 from bot.handlers import send_digest
@@ -15,8 +18,20 @@ from database.db import (
     remove_from_group,
 )
 from services.digest import DigestService
-from services.reader import ChannelInfo
-from tests.fakes import FakeReader, fake_llm, make_post
+from services.reader import ChannelInfo  # noqa: E402
+from services.reader import Post, post_link
+from tests.fakes import FakeReader, fake_llm
+
+
+def make_post(channel, message_id, text):
+    """send_digest uses the real clock, so posts are dated relative to it."""
+    date = datetime.now(timezone.utc) - timedelta(hours=1)
+    return Post(message_id, date, text, post_link(channel, message_id))
+
+
+@pytest.fixture(autouse=True)
+def no_real_digest_file(tmp_path, monkeypatch):
+    monkeypatch.setattr("bot.handlers.LAST_DIGEST_PATH", tmp_path / "last_digest.txt")
 
 AI = ChannelInfo(-1001, "AI news", "ainews")
 GAMES = ChannelInfo(-1002, "Games", "games")
