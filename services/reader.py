@@ -87,6 +87,7 @@ class TelethonReader:
     def __init__(self, client: Any):
         self.client = client
         self._dialogs_loaded = False
+        self._entities: dict[int, Any] = {}
 
     async def resolve(self, ref: ChannelRef) -> ChannelInfo:
         from telethon import utils
@@ -137,10 +138,7 @@ class TelethonReader:
     ) -> list[Post]:
         from telethon import errors
 
-        # Public channels by username: the account may not be subscribed, so the id is not in its cache.
-        entity = await self.client.get_entity(channel.username) if channel.username else await self._entity_by_id(
-            channel.peer_id
-        )
+        entity = await self._entity_for(channel)
         raw = []
         try:
             async for message in self.client.iter_messages(entity, limit=limit, min_id=after_id):
@@ -173,6 +171,22 @@ class TelethonReader:
                 Post(first.id, first.date, text[:MAX_POST_CHARS], post_link(channel, first.id), images)
             )
         return posts
+
+    async def _entity_for(self, channel: ChannelInfo) -> Any:
+        """Cheapest lookup first. Resolving @usernames is rate-limited by Telegram (flood waits
+        after a few dozen in a row), so it is the last resort, and each result is kept for the process."""
+        if channel.peer_id in self._entities:
+            return self._entities[channel.peer_id]
+        entity = None
+        try:
+            entity = await self.client.get_entity(channel.peer_id)  # Telethon's session cache, no request
+        except ValueError:
+            if channel.username:
+                entity = await self.client.get_entity(channel.username)  # not subscribed: resolve once
+            else:
+                entity = await self._entity_by_id(channel.peer_id)
+        self._entities[channel.peer_id] = entity
+        return entity
 
     async def _entity_by_id(self, peer_id: int) -> Any:
         try:

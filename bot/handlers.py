@@ -11,11 +11,27 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject
-from aiogram.types import CallbackQuery, LinkPreviewOptions, Message, MessageOriginChannel
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LinkPreviewOptions,
+    Message,
+    MessageOriginChannel,
+)
 
-from bot.keyboards import DIGEST_WINDOWS, button_texts, channels_keyboard, digest_menu, main_menu
+from bot.keyboards import DIGEST_WINDOWS, button_texts, channels_keyboard, digest_menu, grid, main_menu
 from bot.texts import t
-from database.db import SessionMaker, add_channel, get_settings, last_run, list_channels, remove_channel
+from database.db import (
+    SessionMaker,
+    add_channel,
+    get_settings,
+    last_run,
+    list_channels,
+    remove_channel,
+    update_settings,
+)
+from services.styles import STYLES, style_title
 from services.digest import DigestService
 from services.reader import Reader, ReaderError
 from services.refs import ChannelRef, RefError, parse_channel_ref
@@ -192,15 +208,37 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
 
     @router.message(F.text.in_(button_texts("menu_digest")))
     async def btn_digest(message: Message, lang: str) -> None:
-        await message.answer(t(lang, "digest_choose"), reply_markup=digest_menu(lang))
+        await message.answer(t(lang, "digest_choose"), reply_markup=await digest_keyboard(lang))
+
+    async def digest_keyboard(lang: str) -> InlineKeyboardMarkup:
+        async with sessions() as db:
+            prefs = await get_settings(db, defaults)
+        style = style_title(prefs.style, lang) + (" ✍️" if prefs.custom_prompt else "")
+        return digest_menu(lang, style)
+
+    @router.callback_query(F.data == "dg:style")
+    async def cb_digest_styles(call: CallbackQuery, lang: str) -> None:
+        buttons = [InlineKeyboardButton(text=style_title(k, lang), callback_data=f"dgs:{k}") for k in STYLES]
+        await call.message.edit_text(t(lang, "choose_style"), reply_markup=InlineKeyboardMarkup(inline_keyboard=grid(buttons, 2)))
+        await call.answer()
+
+    @router.callback_query(F.data.startswith("dgs:"))
+    async def cb_digest_style(call: CallbackQuery, lang: str) -> None:
+        key = call.data.split(":", 1)[1]
+        if key in STYLES:
+            async with sessions() as db:
+                await update_settings(db, defaults, style=key, custom_prompt=None)
+        await call.message.edit_text(t(lang, "digest_choose"), reply_markup=await digest_keyboard(lang))
+        await call.answer()
 
     @router.callback_query(F.data.startswith("dg:"))
     async def cb_digest(call: CallbackQuery, bot: Bot, lang: str) -> None:
         key = call.data.split(":", 1)[1]
         await call.answer()
+        if key not in DIGEST_WINDOWS:
+            return
         await call.message.edit_reply_markup(reply_markup=None)
-        if key in DIGEST_WINDOWS:
-            await run_digest(bot, call.message.chat.id, lang, call.message.answer, DIGEST_WINDOWS[key])
+        await run_digest(bot, call.message.chat.id, lang, call.message.answer, DIGEST_WINDOWS[key])
 
     # ---- status ----
 
