@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from bot.texts import t
 from database.db import SessionMaker, get_channel, get_settings, list_channels
 from database.models import DigestRun
-from services.llm import LLM, Usage
+from services.llm import LLM, WORDS_PLAIN, WORDS_STYLED, Usage
 from services.reader import ChannelInfo, Post, Reader
 from services.styles import DEFAULT_STYLE, language_name, style_prompt
 from utils.text import link_refs, split_message
@@ -85,6 +85,8 @@ class DigestService:
         self.lang = prefs.ui_language or self.lang
         self.llm.language = language_name(prefs.language)
         style = style_prompt(prefs.style, prefs.language, prefs.custom_prompt)
+        plain = prefs.style == DEFAULT_STYLE and not prefs.custom_prompt
+        words = WORDS_PLAIN if plain else WORDS_STYLED
         if not channels:
             return DigestResult(messages=[t(self.lang, "no_channels")])
 
@@ -115,7 +117,7 @@ class DigestService:
                             result.images += 1
                             post.image_descriptions.append(await self.llm.describe_image(image))
                         post.images.clear()
-                    summary = await self.llm.summarize_channel(channel.title, posts, style)
+                    summary = await self.llm.summarize_channel(channel.title, posts, style, words)
                 except Exception as exc:  # one broken channel must not kill the whole digest
                     logger.warning("channel %s failed: %s", channel.title, exc)
                     result.errors.append(f"{channel.title} ({exc})")
@@ -133,7 +135,7 @@ class DigestService:
         highlights = ""
         if len(sections) >= 2:
             try:
-                highlights = await self.llm.highlights([(s.channel.title, s.summary) for s in sections])
+                highlights = await self.llm.highlights([(s.channel.title, s.summary) for s in sections], style)
             except Exception as exc:
                 logger.warning("highlights failed: %s", exc)
 

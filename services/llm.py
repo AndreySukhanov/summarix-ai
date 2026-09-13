@@ -10,23 +10,30 @@ from services.reader import Post
 
 POST_CHARS_IN_PROMPT = 1500
 
-SUMMARY_PROMPT = """You write a personal digest of one Telegram channel for its reader.
+# The voice goes first and is framed as the reader's choice: placed after a block of "hard rules"
+# it read as an afterthought and every style collapsed into the same neutral summary.
+SUMMARY_PROMPT = """You retell what one Telegram channel posted, for a reader who chose a specific voice for their digest.
 
-Hard rules - they hold whatever the style below says:
+THE VOICE - the reader picked it on purpose. Commit to it in every sentence; do not drift back into a neutral news summary:
+{style}
+
+Keep, whatever the voice:
 - Write in {language}.
-- After each point, cite its source posts by number in square brackets, e.g. [2] or [2][5]. Never write links or URLs.
-- Use only facts from the posts. Merge posts about the same thing.
-- Skip ads, giveaways and cross-promotion of other channels. If the posts are only that, say so in one line.
-- Keep it short: about 120 words at most for this channel.
-- No Markdown: no **bold**, no # headers. Plain text; emoji are fine if the style uses them.
+- Facts come only from the posts: the voice changes how you tell them, never what happened. Merge posts about the same thing.
+- Cite source posts by number in square brackets at the end of the sentence they support, e.g. [2] or [2][5]. Never write links.
+- Skip ads, giveaways and cross-promotion. If that is all there is, say so in one line - in the voice.
+- Up to about {words} words for this channel. No Markdown (no **, no #)."""
 
-Style:
-{style}"""
+HIGHLIGHTS_PROMPT = """Below are digests of several Telegram channels. Pick the 3 most important items across all of them.
 
-HIGHLIGHTS_PROMPT = """Below are digests of several Telegram channels.
-Pick the 3 most important items across all of them. Write in {language}.
-One line each, starting with "• ", then the channel name in parentheses at the end.
+Write in {language}, in this voice:
+{style}
+
+Format regardless of the voice: exactly 3 lines, each starts with "• " and ends with the channel name in parentheses.
 No intro, no Markdown, no source numbers."""
+
+WORDS_PLAIN = 120  # the default "digest" style is a list
+WORDS_STYLED = 180  # voices need room for their tone
 
 IMAGE_PROMPT = """Describe this image from a Telegram channel post in one or two sentences, in {language}.
 If it contains text, a chart or a screenshot, give the key text or numbers. If it is a decorative picture, say so in three words."""
@@ -61,7 +68,7 @@ class LLM:
             ],
         )
 
-    async def summarize_channel(self, title: str, posts: list[Post], style: str) -> str:
+    async def summarize_channel(self, title: str, posts: list[Post], style: str, words: int = WORDS_PLAIN) -> str:
         blocks = []
         for i, post in enumerate(posts, start=1):
             lines = [f"[{i}] {post.date:%Y-%m-%d %H:%M}"]
@@ -74,17 +81,17 @@ class LLM:
         return await self._chat(
             self.model,
             [
-                {"role": "system", "content": SUMMARY_PROMPT.format(language=self.language, style=style)},
+                {"role": "system", "content": SUMMARY_PROMPT.format(language=self.language, style=style, words=words)},
                 {"role": "user", "content": user},
             ],
         )
 
-    async def highlights(self, sections: list[tuple[str, str]]) -> str:
+    async def highlights(self, sections: list[tuple[str, str]], style: str) -> str:
         user = "\n\n".join(f"## {title}\n{summary}" for title, summary in sections)
         return await self._chat(
             self.model,
             [
-                {"role": "system", "content": HIGHLIGHTS_PROMPT.format(language=self.language)},
+                {"role": "system", "content": HIGHLIGHTS_PROMPT.format(language=self.language, style=style)},
                 {"role": "user", "content": user},
             ],
         )
