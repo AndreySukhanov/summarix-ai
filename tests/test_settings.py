@@ -54,7 +54,9 @@ async def test_digest_uses_style_language_and_custom_prompt_from_settings(sessio
     system = client.requests[-1]["messages"][0]["content"]
     assert "Write in English." in system
     assert "TL;DR" in system
-    assert "cite its source posts by number" in system  # hard rules survive any style
+    assert "Cite source posts by number" in system  # hard rules survive any style
+    assert system.index("THE VOICE") < system.index("Cite source posts")  # voice first
+    assert "about 180 words" in system
 
     async with sessions() as db:
         await update_settings(db, DEFAULTS, custom_prompt="Only numbers, like a trader.")
