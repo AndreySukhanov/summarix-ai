@@ -1,82 +1,42 @@
 """
-SQLAlchemy models. Telegram user IDs are BigInteger — they exceed int32.
+Two tables: the channels you follow and a log of digest runs.
+Telegram peer IDs exceed int32, hence BigInteger.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import (
-    BigInteger, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
-)
-from sqlalchemy.orm import declarative_base, relationship
-
-from config.constants import SubStatus, Tier
-
-Base = declarative_base()
+from sqlalchemy import BigInteger, DateTime, Integer, String, Text
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-def utcnow():
+def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True)
-    telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
-    username = Column(String, nullable=True)
-    first_name = Column(String, nullable=True)
-    language = Column(String, default="en")
-    is_banned = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=utcnow)
-    last_active = Column(DateTime, default=utcnow)
-
-    subscription = relationship(
-        "Subscription", back_populates="user", uselist=False, cascade="all, delete-orphan"
-    )
+class Base(DeclarativeBase):
+    pass
 
 
-class Subscription(Base):
-    __tablename__ = "subscriptions"
+class Channel(Base):
+    __tablename__ = "channels"
 
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    tier = Column(Enum(Tier), default=Tier.FREE, nullable=False)
-    status = Column(Enum(SubStatus), default=SubStatus.ACTIVE, nullable=False)
-    requests_used = Column(Integer, default=0)
-    bonus_requests = Column(Integer, default=0)  # referral bonuses, added on top of tier quota
-    started_at = Column(DateTime, default=utcnow)
-    expires_at = Column(DateTime, nullable=True)  # None = never (FREE)
-
-    user = relationship("User", back_populates="subscription")
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    peer_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Highest message id already included in a delivered digest; 0 = never read.
+    last_message_id: Mapped[int] = mapped_column(BigInteger, default=0)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class Payment(Base):
-    __tablename__ = "payments"
+class DigestRun(Base):
+    __tablename__ = "digest_runs"
 
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    tier = Column(Enum(Tier), nullable=False)
-    amount_stars = Column(Integer, nullable=False)
-    telegram_charge_id = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime, default=utcnow)
-
-
-class ReferralCode(Base):
-    __tablename__ = "referral_codes"
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    code = Column(String(16), unique=True, index=True, nullable=False)
-    uses_count = Column(Integer, default=0)
-    max_uses = Column(Integer, default=100)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=utcnow)
-
-
-class Referral(Base):
-    __tablename__ = "referrals"
-
-    id = Column(Integer, primary_key=True)
-    referrer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    referred_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    code_id = Column(Integer, ForeignKey("referral_codes.id"), nullable=False)
-    created_at = Column(DateTime, default=utcnow)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    trigger: Mapped[str] = mapped_column(String(16))  # "schedule" | "manual"
+    channels: Mapped[int] = mapped_column(Integer, default=0)
+    posts: Mapped[int] = mapped_column(Integer, default=0)
+    images: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[str | None] = mapped_column(Text, nullable=True)

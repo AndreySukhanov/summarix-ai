@@ -1,64 +1,86 @@
 """
-Bot entry point: init DB, pick FSM storage (Redis with ping-verified
-fallback to memory), register middlewares and routers, start polling.
-
-Router order matters in aiogram — first match wins. The AI handler
-catches all plain text, so it goes last.
+Wiring: settings -> SQLite -> Telethon (owner's account) -> model -> bot + daily scheduler.
 """
 import asyncio
+import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.fsm.storage.memory import MemoryStorage
+from openai import AsyncOpenAI
+from telethon import TelegramClient
 
-from bot.handlers import admin, ai, referral, start, subscription
-from bot.middlewares import BanCheckMiddleware, RateLimitMiddleware
-from config.settings import settings
-from database.connection import init_db
-from utils.logger import get_logger
+from bot.handlers import OwnerOnly, build_router, send_digest
+from config.settings import Settings
+from database.db import init_models, make_sessionmaker
+from services.digest import DigestService
+from services.llm import LLM
+from services.reader import TelethonReader
+from services.scheduler import run_daily
 
-logger = get_logger("bot")
+logger = logging.getLogger("summarix")
 
 
-async def _make_storage():
-    """Redis-backed FSM storage if Redis is reachable, else in-memory."""
+async def main() -> None:
+    settings = Settings()
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
+    engine, sessions = make_sessionmaker(settings.database_url)
+    await init_models(engine)
+
+    client = TelegramClient(settings.tg_session, settings.tg_api_id, settings.tg_api_hash)
+    await client.connect()
+    if not await client.is_user_authorized():
+        raise SystemExit("Telegram account is not logged in. Run once: python -m scripts.login")
+
+    llm = LLM(
+        AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url),
+        settings.llm_model,
+        vision_model=settings.vision_model,
+        language=settings.digest_language,
+    )
+    reader = TelethonReader(client)
+    service = DigestService(
+        sessions,
+        reader,
+        llm,
+        lookback_hours=settings.lookback_hours,
+        max_posts_per_channel=settings.max_posts_per_channel,
+        describe_images=settings.describe_images,
+        max_images_per_run=settings.max_images_per_run,
+        ui_language=settings.ui_language,
+        timezone_name=settings.timezone,
+    )
+
+    bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode="HTML"))
+    dp = Dispatcher()
+    dp.message.outer_middleware(OwnerOnly(settings.owner_id))
+    dp.callback_query.outer_middleware(OwnerOnly(settings.owner_id))
+    dp.include_router(
+        build_router(
+            sessions=sessions,
+            reader=reader,
+            service=service,
+            lang=settings.ui_language,
+            digest_time=settings.digest_time,
+            timezone_name=settings.timezone,
+            model=settings.llm_model,
+        )
+    )
+
+    async def scheduled() -> None:
+        await send_digest(bot, settings.owner_id, service, window_hours=None, trigger="schedule")
+
+    scheduler = asyncio.create_task(run_daily(scheduled, settings.digest_time, settings.timezone))
+    logger.info("bot started; digest daily at %s %s", settings.digest_time, settings.timezone)
     try:
-        from aiogram.fsm.storage.redis import RedisStorage
-        from redis.asyncio import Redis
-
-        redis = Redis.from_url(settings.redis_url)
-        await redis.ping()
-        logger.info("FSM storage: Redis")
-        return RedisStorage(redis=redis)
-    except Exception as e:
-        logger.warning(f"Redis unavailable ({e}), FSM storage: memory")
-        return MemoryStorage()
-
-
-async def main():
-    logger.info("Starting bot...")
-
-    try:
-        init_db()
-        logger.info("Database ready")
-    except Exception as e:
-        logger.warning(f"Database unavailable: {e} — starting anyway")
-
-    bot = Bot(token=settings.bot_token, default=DefaultBotProperties())
-    dp = Dispatcher(storage=await _make_storage())
-
-    dp.message.middleware(BanCheckMiddleware())
-    dp.callback_query.middleware(BanCheckMiddleware())
-    dp.message.middleware(RateLimitMiddleware())
-
-    dp.include_router(admin.router)
-    dp.include_router(start.router)
-    dp.include_router(subscription.router)
-    dp.include_router(referral.router)
-    dp.include_router(ai.router)  # catch-all for text — keep last
-
-    logger.info("Bot started, polling...")
-    await dp.start_polling(bot)
+        await dp.start_polling(bot)
+    finally:
+        scheduler.cancel()
+        await client.disconnect()
+        await engine.dispose()
 
 
 if __name__ == "__main__":

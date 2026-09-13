@@ -1,4 +1,5 @@
 .env
+data/
 *.db
 *.session
 *.session-journal
@@ -12,6 +13,6 @@ venv/
 .vscode/
 .idea/
 
-# Internal design sources (only the rendered banner belongs in the repo)
+# Internal design sources
 docs/design-philosophy.md
 docs/banner.html

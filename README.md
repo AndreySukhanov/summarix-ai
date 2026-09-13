@@ -1,160 +1,154 @@
-<p align="center">
-  <img src="docs/banner.png" alt="Summarix AI — production-ready boilerplate for monetized AI Telegram bots" width="100%"/>
-</p>
+# Summarix
 
-<p align="center">
+<p>
   <a href="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml"><img src="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <img src="https://img.shields.io/badge/python-3.13-blue" alt="Python 3.13"/>
   <img src="https://img.shields.io/badge/aiogram-3.x-2CA5E0" alt="aiogram 3"/>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"/>
 </p>
 
-<p align="center">
-  <b>Idea → paying users, without writing the plumbing.</b><br/>
-  You bring one function: <code>text in → text out</code>. This repo brings everything else.
-</p>
+**A personal Telegram bot that reads the channels you follow and sends you one short digest a day.**
 
----
+Self-hosted, single user. It reads channels through your own Telegram account, so private channels work too, summarizes them with any OpenAI-compatible model - images included - and links every point back to the original post.
 
-## The problem this solves
+## What you get
 
-Every monetized AI bot is 10% unique idea and 90% identical plumbing:
+An illustrative digest (channels and news are made up):
 
 ```
-users · quotas · payments · subscription tiers · referrals · rate limiting
-ban system · admin analytics · i18n · scheduled jobs · deployment · tests
+Digest · 13.09.2026
+Channels with news: 3 · posts: 27
+
+Highlights
+• OpenAI shipped a cheaper vision model (AI Weekly)
+• Central bank kept the key rate at 16% (Markets)
+• ...
+
+AI Weekly
+• A new small vision model is priced 4x below the previous one; benchmarks in the post show it on par for OCR (1, 4)
+• Two posts about an agent framework release - mostly a changelog (2, 3)
+
+Markets
+• ...
 ```
 
-People burn weeks on that 90% before they can even test whether anyone wants the 10%. This repo is the 90%, extracted from [Summarix](https://github.com/AndreySukhanov/summarix-bot) — a real bot running in production — and reduced to a clean, replaceable core.
+Numbers in brackets are links to the posts. The model only cites post numbers; the bot turns them into links, so a made-up URL cannot appear.
 
-Your entire product lives in **one file**: [`services/ai_service.py`](services/ai_service.py). The demo ships a GPT-4o-mini chat assistant; swap the function body for RAG, image analysis, transcription, an agent loop — quotas, payments and everything else won't notice.
+## How it works
 
-## Features
+```
+every day at DIGEST_TIME                      /digest, /digest 48
+          │                                          │
+          ▼                                          ▼
+   for each channel: new posts since the last delivered digest
+          │   Telethon, your account (private channels, albums)
+          ▼
+   images ──▶ vision model: one-line caption   (capped per run)
+          ▼
+   posts + captions ──▶ model: 2-6 bullets citing [post numbers]
+          ▼
+   2+ channels ──▶ model: top 3 highlights
+          ▼
+   HTML message(s) to you ──▶ only then posts are marked read
+```
 
-| | What you get | Why it matters |
-|---|---|---|
-| 💳 | **Telegram Stars payments** | Zero setup: no Stripe account, no webhooks, no PSP contract. Invoice → pre-checkout → tier activated. |
-| 📊 | **Subscription tiers + quotas** | FREE / PRO with monthly request limits. New tier = one enum member + two dict rows in [`config/constants.py`](config/constants.py). |
-| 🎁 | **Referral program** | Deep-link invites (`?start=ref_XXX`), bonus requests for both sides, guards against self-referral and double-claiming. |
-| 📈 | **Admin funnel** | `/stats`: registrations → activation → 7-day retention → paying conversion. Plus `/ban` and `/unban`. |
-| 🌍 | **i18n** | English and Russian included; a new language is one dict in [`utils/i18n.py`](utils/i18n.py). |
-| 🛡 | **Abuse protection** | DB-backed ban middleware (cached), per-user rate limiting. |
-| 🗄 | **Async SQLAlchemy 2.0** | SQLite for development, PostgreSQL for production — same code, one env var. |
-| ⏰ | **Celery beat** | Subscription expiry and monthly quota resets run themselves. |
-| 🧪 | **Tests + CI** | pytest on in-memory SQLite (no services needed), GitHub Actions included. |
-| 🐳 | **Docker Compose** | `docker-compose up` = postgres + redis + bot + worker + beat. |
-| 🪂 | **Graceful degradation** | No Redis → in-memory FSM. No Postgres → SQLite. The bot starts anyway. |
+- **Nothing is lost on failure.** Read marks move after the digest is delivered. A crash, an API error or a failed send means the same posts come next time.
+- **One broken channel does not break the digest.** It is listed at the bottom as "could not read".
+- **Ads and cross-promotion are skipped** by the summary prompt.
 
-## Quick start — 15 minutes to a live bot
+## Setup
 
-You need exactly **3 keys**:
+You need four things:
 
-| Key | Where to get it |
+| What | Where |
 |---|---|
-| `BOT_TOKEN` | [@BotFather](https://t.me/BotFather) → `/newbot` |
-| `OPENAI_API_KEY` | [platform.openai.com](https://platform.openai.com/api-keys) |
-| `ADMIN_ID` | [@userinfobot](https://t.me/userinfobot) → your numeric ID |
-
-### With Docker
-
-```bash
-git clone https://github.com/AndreySukhanov/summarix-ai.git
-cd summarix-ai
-cp .env.example .env   # paste your 3 keys
-docker-compose up -d
-```
-
-### Without Docker (SQLite, no Redis needed)
+| `BOT_TOKEN` | [@BotFather](https://t.me/BotFather) → `/newbot`. The chat with this bot is where digests arrive. |
+| `OWNER_ID` | [@userinfobot](https://t.me/userinfobot). Everyone else is ignored. |
+| `TG_API_ID`, `TG_API_HASH` | [my.telegram.org](https://my.telegram.org) → API development tools. Lets the bot read channels as you. |
+| `LLM_API_KEY`, `LLM_MODEL` | OpenAI, OpenRouter, DeepSeek, Qwen or any OpenAI-compatible API. The model must accept images, or set `DESCRIBE_IMAGES=false`. |
 
 ```bash
 git clone https://github.com/AndreySukhanov/summarix-ai.git
 cd summarix-ai
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env   # paste your 3 keys
-python run_bot.py
+cp .env.example .env            # fill in the keys
+
+# once: log in to your Telegram account (phone, code, 2FA password)
+docker compose run --rm bot python -m scripts.login
+
+docker compose up -d
 ```
 
-Message your bot. It answers, counts quota, sells PRO for Stars, and tracks your funnel in `/stats`. That's the whole loop.
+Without Docker: `pip install -r requirements.txt`, then `python -m scripts.login` and `python run_bot.py`.
 
-## Make it yours — 3 steps
+Then open your bot, press Start, and add channels.
 
-**1. Replace the AI logic** — [`services/ai_service.py`](services/ai_service.py)
+## Commands
 
-```python
-async def generate_reply(user_message: str) -> str:
-    # your product goes here: RAG, vision, agents, anything.
-    ...
-```
+| Command | What it does |
+|---|---|
+| `/add @channel https://t.me/other t.me/+invite` | Add one or several channels. Forwarding any post from a channel works too. |
+| `/channels` | Numbered list |
+| `/remove 2` or `/remove @channel` | Remove |
+| `/digest` | Digest of unread posts right now (marks them read) |
+| `/digest 48` | Recap of the last 48 hours, marks nothing |
+| `/status` | Model, next scheduled digest, last run with post/image/token counts |
 
-**2. Set your prices** — [`config/constants.py`](config/constants.py): quotas, Stars prices, referral bonuses. One file.
+## Configuration
 
-**3. Reword the texts** — [`utils/i18n.py`](utils/i18n.py): every user-facing string, en + ru.
+All optional, in `.env`:
 
-Ship it. Everything else — payments, limits, referrals, admin, deploy — already works.
+| Variable | Default | |
+|---|---|---|
+| `DIGEST_TIME` / `TIMEZONE` | `09:00` / `Europe/Moscow` | When the daily digest arrives |
+| `DIGEST_LANGUAGE` | `Russian` | Language of the summaries, whatever the channels are in |
+| `UI_LANGUAGE` | `ru` | `ru` or `en` for bot messages |
+| `LLM_BASE_URL` | OpenAI | e.g. `https://openrouter.ai/api/v1` |
+| `VISION_MODEL` | `LLM_MODEL` | A separate, cheaper model for image captions |
+| `DESCRIBE_IMAGES` | `true` | Caption photos, including posts that are only a picture or a chart |
+| `MAX_IMAGES_PER_RUN` | `20` | Cost cap: images beyond this are skipped |
+| `LOOKBACK_HOURS` | `24` | How far back the first digest of a newly added channel looks |
+| `MAX_POSTS_PER_CHANNEL` | `60` | Upper bound per channel per digest |
 
-## How it's wired
+## Cost
 
-```
-telegram ──▶ aiogram 3 (polling)
-              │  middlewares: ban check · rate limit
-              │  routers: admin → start → subscription → referral → ai (catch-all, last)
-              ▼
-       async SQLAlchemy 2.0 ──▶ PostgreSQL (prod) / SQLite (dev)
-              │
-              ├──▶ OpenAI API      ← services/ai_service.py — YOUR CODE HERE
-              └──▶ Redis ──▶ Celery beat: expire subscriptions · reset quotas
-```
+Per digest: one call per image (sent at low detail), one call per channel with news, one call for highlights. Twenty channels with a few posts each and the image cap at 20 means about 40 calls a day; on a small model that is usually a few cents a day - `/status` shows the real token count.
+
+## Privacy and security
+
+- **The session file (`data/owner.session`) is full access to your Telegram account.** It stays on your machine, is git- and docker-ignored, and should never be shared or committed.
+- The bot answers only `OWNER_ID`; every other update is dropped before any handler runs.
+- The account is used read-only: it never posts, joins or leaves anything. Channels behind an invite link must be joined by you first.
+- Post texts and images are sent to the model provider you configure. Pick one whose data policy you accept, or point `LLM_BASE_URL` at a local model.
+- Storage is a local SQLite file with channel names and read marks only; post contents are not stored.
+
+## Project layout
 
 ```
 bot/
-  main.py                  entry point: storage fallback, middleware/router registration
-  handlers/
-    start.py               registration + referral deep-links
-    ai.py                  quota check → AI call → reply (charges quota only on success)
-    subscription.py        status, Stars invoice, pre-checkout, activation
-    referral.py            /invite: personal link, stats, share button
-    admin.py               /stats funnel, /ban, /unban
-  middlewares.py           ban check + rate limit
-  keyboards.py             inline keyboards
+  main.py          wiring: settings, SQLite, Telethon, model, bot, scheduler
+  handlers.py      commands + owner-only middleware
+  texts.py         ru / en interface strings
 services/
-  ai_service.py            ★ THE SLOT — your product
-  subscription_service.py  users, quotas, upgrades
-  referral_service.py      codes, bonuses, anti-abuse guards
-database/
-  models.py                User, Subscription, Payment, ReferralCode, Referral
-  connection.py            dual sync/async session stacks
-tasks/                     Celery app + scheduled maintenance
-config/                    settings (.env) + business constants
-utils/                     logger, i18n
-tests/                     11 tests, in-memory async SQLite
+  reader.py        Telethon: resolve channels, fetch posts, albums, photos
+  llm.py           prompts: image captions, channel summary, highlights
+  digest.py        build a digest, mark read after delivery
+  scheduler.py     daily run in your timezone, no Celery or Redis
+  refs.py          parse @name, t.me links, invite links
+database/          two tables: channels, digest runs
+scripts/login.py   one-time account login
+utils/text.py      citations → links, safe HTML, splitting at 4096 chars
+tests/             offline: fake Telegram reader and fake model
 ```
 
-## Design decisions (and why)
+## Tests
 
-- **Telegram Stars, not Stripe.** For digital goods inside Telegram, Stars are mandatory per platform rules anyway — and they require literally zero setup. Fiat/crypto gateways can be added later as extra handlers.
-- **Quota is charged after generation, not before.** A failed API call never burns a user's request.
-- **Referral bonuses extend the monthly quota additively** (`Subscription.bonus_requests`) — no separate ledger, nothing to reconcile.
-- **The AI router registers last.** It's a catch-all for text; commands and callbacks must match first.
-- **`expire_on_commit=False`** on async sessions so handlers can read attributes after commit. Trade-off: lazy loading is off — use `selectinload()` for relationships.
-- **SQLite in dev is a feature.** Clone → run, no infrastructure. The same code hits Postgres in production via one env var.
+```bash
+pip install -r requirements.txt
+pytest
+```
 
-## FAQ
-
-**Can I use Claude / Gemini / a local model instead of OpenAI?**
-Yes — `ai_service.py` is the only file that knows OpenAI exists. Swap the client, keep the signature.
-
-**Polling or webhooks?**
-Polling, deliberately: it works behind NAT, needs no domain or SSL, and survives restarts. At the scale where webhooks matter you'll know how to add them.
-
-**Where do I add my own tables?**
-`database/models.py`, then either recreate the dev DB or wire up Alembic — `init_db()` covers you until the schema starts evolving.
-
-**How do I check it works?**
-`pytest` — 11 tests, no DB, no Redis, no network. CI runs the same on every push.
+28 tests, no network: link parsing, album grouping, citation linking and HTML escaping, message splitting, schedule in local time, read marks only after commit, recap windows, image cost cap, broken channels, owner-only access.
 
 ## License
 
-[MIT](LICENSE) — build a business on it, no strings. If it saved you a week of plumbing, a ⭐ says thanks.
-
-<p align="center"><sub>Extracted from <a href="https://github.com/AndreySukhanov/summarix-bot">Summarix</a>, a production Telegram bot for AI channel digests.</sub></p>
+[MIT](LICENSE)

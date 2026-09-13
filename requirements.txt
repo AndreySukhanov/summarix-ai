@@ -1,22 +1,18 @@
-# Bot
+# Bot and Telegram account
 aiogram==3.17.0
+telethon==1.34.0
 
-# AI
+# Model (any OpenAI-compatible API)
 openai==1.59.6
 
-# Database
+# Storage
 SQLAlchemy==2.0.36
-greenlet==3.1.1
-asyncpg==0.30.0
 aiosqlite==0.20.0
-psycopg2-binary==2.9.10
+greenlet==3.1.1
 
 # Config
 pydantic-settings==2.7.1
-
-# Infra
-redis==5.2.1
-celery==5.4.0
+tzdata==2025.2
 
 # Tests & lint
 pytest==8.3.4
