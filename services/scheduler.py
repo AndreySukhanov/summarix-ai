@@ -1,5 +1,7 @@
 """
 Daily digest without Celery or Redis: one asyncio task that sleeps until the next run.
+Time and timezone are read from the settings each round; `wake` interrupts the sleep
+when the owner changes them, so a new time applies immediately.
 """
 import asyncio
 import logging
@@ -21,12 +23,22 @@ def next_run_at(now: datetime, hhmm: str, tz_name: str) -> datetime:
     return candidate.astimezone(timezone.utc)
 
 
-async def run_daily(job: Callable[[], Awaitable[None]], hhmm: str, tz_name: str) -> None:
+async def run_daily(
+    job: Callable[[], Awaitable[None]],
+    schedule: Callable[[], Awaitable[tuple[str, str]]],
+    wake: asyncio.Event,
+) -> None:
     while True:
+        hhmm, tz_name = await schedule()
         target = next_run_at(datetime.now(timezone.utc), hhmm, tz_name)
-        delay = (target - datetime.now(timezone.utc)).total_seconds()
+        delay = max((target - datetime.now(timezone.utc)).total_seconds(), 0)
         logger.info("next digest at %s (in %.0f min)", target.isoformat(), delay / 60)
-        await asyncio.sleep(max(delay, 0))
+        wake.clear()
+        try:
+            await asyncio.wait_for(wake.wait(), timeout=delay)
+            continue  # schedule changed: recompute
+        except asyncio.TimeoutError:
+            pass
         try:
             await job()
         except Exception:

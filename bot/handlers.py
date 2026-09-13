@@ -6,13 +6,14 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
+from zoneinfo import ZoneInfo
 
 from aiogram import BaseMiddleware, Bot, F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import LinkPreviewOptions, Message, MessageOriginChannel, TelegramObject
 
 from bot.texts import t
-from database.db import SessionMaker, add_channel, last_run, list_channels, remove_channel
+from database.db import SessionMaker, add_channel, get_settings, last_run, list_channels, remove_channel
 from services.digest import DigestService
 from services.reader import Reader, ReaderError
 from services.refs import ChannelRef, RefError, parse_channel_ref
@@ -56,8 +57,7 @@ def build_router(
     reader: Reader,
     service: DigestService,
     lang: str,
-    digest_time: str,
-    timezone_name: str,
+    defaults: dict,
     model: str,
 ) -> Router:
     router = Router()
@@ -94,7 +94,9 @@ def build_router(
 
     @router.message(Command("start", "help"))
     async def cmd_help(message: Message) -> None:
-        await message.answer(t(lang, "help", time=digest_time, tz=timezone_name))
+        async with sessions() as db:
+            prefs = await get_settings(db, defaults)
+        await message.answer(t(lang, "help", time=prefs.digest_time, tz=prefs.timezone))
 
     @router.message(Command("add"))
     async def cmd_add(message: Message, command: CommandObject) -> None:
@@ -175,7 +177,9 @@ def build_router(
         async with sessions() as db:
             channels = await list_channels(db)
             run = await last_run(db)
-        next_local = next_run_at(datetime.now(timezone.utc), digest_time, timezone_name)
+            prefs = await get_settings(db, defaults)
+        next_utc = next_run_at(datetime.now(timezone.utc), prefs.digest_time, prefs.timezone)
+        next_local = next_utc.astimezone(ZoneInfo(prefs.timezone))
         last = t(lang, "never")
         if run:
             last = t(
@@ -192,7 +196,7 @@ def build_router(
                 "status",
                 model=html.escape(model),
                 channels=len(channels),
-                next_run=next_local.strftime("%d.%m %H:%M UTC"),
+                next_run=f"{next_local:%d.%m %H:%M} ({prefs.timezone})",
                 last=last,
             )
         )

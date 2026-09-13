@@ -12,9 +12,35 @@ TEXTS = {
             "/channels - список\n"
             "/digest - дайджест непрочитанного сейчас\n"
             "/digest 48 - пересказ за последние 48 часов, не отмечая прочитанным\n"
-            "/status - последний запуск и расписание\n\n"
+            "/status - последний запуск и расписание\n"
+            "/settings - стиль, язык, время, часовой пояс, свой промпт\n\n"
             "Сам присылаю дайджест каждый день в {time} ({tz})."
         ),
+        "settings": (
+            "<b>Настройки</b>\n\n"
+            "Стиль: {style}\n"
+            "Язык дайджеста: {language}\n"
+            "Время: {time}\n"
+            "Часовой пояс: {tz}"
+        ),
+        "btn_style": "🎨 Стиль",
+        "btn_language": "🌍 Язык",
+        "btn_time": "⏰ Время",
+        "btn_tz": "🌐 Часовой пояс",
+        "btn_prompt": "✍️ Свой промпт",
+        "back": "← Назад",
+        "choose_style": "Выбери стиль дайджеста:",
+        "choose_language": "На каком языке писать дайджест:",
+        "choose_tz": "Часовой пояс. Нет нужного - пришли, например, <code>/tz Europe/Astrakhan</code>",
+        "time_hint": "Пришли время дайджеста командой, например <code>/time 08:30</code>",
+        "tz_invalid": "Не знаю часовой пояс «{tz}». Формат как <code>Europe/Moscow</code> или <code>Asia/Almaty</code>.",
+        "prompt_hint": (
+            "Свой промпт заменяет стиль. Пришли <code>/prompt</code> и текст, например:\n"
+            "<code>/prompt пиши как аналитик для инвестора, только цифры и выводы</code>\n\n"
+            "Вернуть обычный стиль: <code>/prompt off</code>"
+        ),
+        "custom_prompt_on": "заменён своим промптом",
+        "custom_prompt_off": "",
         "added": "Добавил: <b>{title}</b>",
         "already": "Уже в списке: <b>{title}</b>",
         "folder_added": "Папка <b>{title}</b>: добавлено {added}, уже были {existing}",
@@ -52,9 +78,35 @@ TEXTS = {
             "/channels - list\n"
             "/digest - digest of unread posts now\n"
             "/digest 48 - recap of the last 48 hours without marking anything read\n"
-            "/status - last run and schedule\n\n"
+            "/status - last run and schedule\n"
+            "/settings - style, language, time, timezone, custom prompt\n\n"
             "I send the digest every day at {time} ({tz})."
         ),
+        "settings": (
+            "<b>Settings</b>\n\n"
+            "Style: {style}\n"
+            "Digest language: {language}\n"
+            "Time: {time}\n"
+            "Timezone: {tz}"
+        ),
+        "btn_style": "🎨 Style",
+        "btn_language": "🌍 Language",
+        "btn_time": "⏰ Time",
+        "btn_tz": "🌐 Timezone",
+        "btn_prompt": "✍️ Custom prompt",
+        "back": "← Back",
+        "choose_style": "Pick a digest style:",
+        "choose_language": "Language of the digest:",
+        "choose_tz": "Timezone. Not listed? Send e.g. <code>/tz America/New_York</code>",
+        "time_hint": "Send the digest time as a command, e.g. <code>/time 08:30</code>",
+        "tz_invalid": "Unknown timezone \"{tz}\". Use a name like <code>Europe/Moscow</code>.",
+        "prompt_hint": (
+            "A custom prompt replaces the style. Send <code>/prompt</code> with your text, e.g.\n"
+            "<code>/prompt write like an analyst briefing an investor, numbers and conclusions only</code>\n\n"
+            "Back to the regular style: <code>/prompt off</code>"
+        ),
+        "custom_prompt_on": "replaced by custom prompt",
+        "custom_prompt_off": "",
         "added": "Added: <b>{title}</b>",
         "already": "Already in the list: <b>{title}</b>",
         "folder_added": "Folder <b>{title}</b>: added {added}, already had {existing}",

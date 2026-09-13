@@ -1,5 +1,5 @@
 """
-Two tables: the channels you follow and a log of digest runs.
+Three tables: the channels you follow, your settings, and a log of digest runs.
 Telegram peer IDs exceed int32, hence BigInteger.
 """
 from datetime import datetime, timezone
@@ -26,6 +26,19 @@ class Channel(Base):
     # Highest message id already included in a delivered digest; 0 = never read.
     last_message_id: Mapped[int] = mapped_column(BigInteger, default=0)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class BotSettings(Base):
+    """One row (id=1): what the owner changed in /settings. Seeded from .env on first start."""
+
+    __tablename__ = "settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    style: Mapped[str] = mapped_column(String(32))
+    language: Mapped[str] = mapped_column(String(8))
+    digest_time: Mapped[str] = mapped_column(String(5))
+    timezone: Mapped[str] = mapped_column(String(64))
+    custom_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class DigestRun(Base):

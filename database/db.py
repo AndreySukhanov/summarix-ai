@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from database.models import Base, Channel, DigestRun
+from database.models import Base, BotSettings, Channel, DigestRun
 
 SessionMaker = async_sessionmaker[AsyncSession]
 
@@ -52,6 +52,24 @@ async def remove_channel(db: AsyncSession, peer_id: int) -> bool:
         return False
     await db.delete(channel)
     return True
+
+
+async def get_settings(db: AsyncSession, defaults: dict) -> BotSettings:
+    """The single settings row, created from `defaults` (style, language, digest_time, timezone) if missing."""
+    row = await db.get(BotSettings, 1)
+    if row is None:
+        row = BotSettings(id=1, **defaults)
+        db.add(row)
+        await db.commit()
+    return row
+
+
+async def update_settings(db: AsyncSession, defaults: dict, **changes) -> BotSettings:
+    row = await get_settings(db, defaults)
+    for key, value in changes.items():
+        setattr(row, key, value)
+    await db.commit()
+    return row
 
 
 async def last_run(db: AsyncSession) -> DigestRun | None:
