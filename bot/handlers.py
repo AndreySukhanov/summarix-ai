@@ -6,6 +6,7 @@ import html
 import logging
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -54,6 +55,17 @@ async def send_digest(bot: Bot, chat_id: int, service: DigestService, *, window_
         for chunk in result.messages:
             await bot.send_message(chat_id, chunk, link_preview_options=NO_PREVIEW)
         await service.commit(result, trigger)
+        _save_last_digest(result.messages)
+
+
+def _save_last_digest(messages: list[str]) -> None:
+    """Local copy of the latest digest (data/ is git-ignored) - handy for tuning styles."""
+    try:
+        path = Path("data/last_digest.txt")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n\n".join(messages), encoding="utf-8")
+    except OSError:
+        logger.warning("could not save the last digest")
 
 
 def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestService, defaults: dict, model: str) -> Router:
