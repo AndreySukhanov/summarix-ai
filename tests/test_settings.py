@@ -34,7 +34,7 @@ async def test_settings_row_is_seeded_once_then_updated(sessions):
 
 def test_style_prompt_follows_digest_language_and_custom_override():
     assert len(STYLES) == 13
-    assert style_prompt("rick", "ru").startswith("Ты - Рик Санчез в русской озвучке Сыендука")
+    assert style_prompt("rick", "ru").startswith("Голос: гениальный учёный")
     assert style_prompt("rick", "es").startswith("Escribe como un científico genio")
     assert style_prompt("rick", "xx").startswith("You are a burned-out genius")  # unknown language -> English
     assert "я гений" not in style_prompt("rick", "ru").split("словам")[0]  # no instruction to brag
@@ -56,7 +56,8 @@ async def test_digest_uses_style_language_and_custom_prompt_from_settings(sessio
     user = summary_request["messages"][-1]["content"]
     assert "Write in English." in user
     assert "put the source post number in square brackets" in user  # hard rules survive any style
-    assert "180 words" in user
+    assert "130 words" in user
+    assert "emoji" in user and "burps" in user
     assert user.index("news") < user.index("STYLE") < user.index("TL;DR")  # posts first, style last
     assert user.rstrip().endswith(STYLES["tldr"]["prompt"]["en"])
 
@@ -114,3 +115,15 @@ def test_timezones():
     assert not valid_timezone("Mars/Olympus")
     assert utc_offset("UTC") == "UTC+0"
     assert set(LANGUAGES) == {"ru", "en", "es", "fr", "kk"}
+
+
+def test_disclaimers_are_stripped_and_names_are_not_in_prompts():
+    from services.llm import strip_disclaimer
+
+    text = "Не могу копировать голос, но вот:\n\nСам пересказ [1]"
+    assert strip_disclaimer(text) == "Сам пересказ [1]"
+    assert strip_disclaimer("I can't do that.") == "I can't do that."  # nothing else left: keep as is
+    assert strip_disclaimer("Normal text") == "Normal text"
+    for lang in ("ru", "en"):
+        prompt = STYLES["rick"]["prompt"][lang].lower()
+        assert "burp" not in prompt and "буэ" not in prompt and "sanchez" not in prompt

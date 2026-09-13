@@ -6,6 +6,7 @@ send never swallows posts.
 """
 import asyncio
 import html
+import re
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -181,7 +182,8 @@ class DigestService:
                 name = html.escape(s.channel.title, quote=False)
                 if s.channel.username:
                     name = f'<a href="https://t.me/{s.channel.username}">{name}</a>'
-                parts += ["", f"<b>{name}</b>", link_refs(s.summary, s.posts)]
+                body = re.sub(r"\n{3,}", "\n\n", link_refs(s.summary, s.posts).strip())
+                parts += ["", f"<b>{name}</b>", body]
         if result.errors:
             parts += ["", t(self.lang, "failed_channels", items=html.escape(", ".join(result.errors), quote=False))]
         return "\n".join(parts)

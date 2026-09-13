@@ -3,6 +3,7 @@ Everything that talks to the model: image captions, per-channel summaries, cross
 Works with any OpenAI-compatible chat API.
 """
 import base64
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,7 +30,10 @@ Format:
 - At most {words} words, one or two short paragraphs. With many posts, keep only what matters most.
 - Facts only from the posts - the style changes how you tell them, never what happened. Skip ads and cross-promotion.
 - After a key fact, put the source post number in square brackets, e.g. [2]. Only after key facts, not after every sentence. Never write links.
-- Do not repeat the same joke or catchphrase twice.
+- This retelling is one of many channels the reader sees back to back in one digest. Every channel must sound fresh: use at most one or two signature devices of the style here, no stock opening or closing line, no joke you would reuse for another channel.
+- Start with the retelling itself: no disclaimers, no remarks about the style or the voice.
+- Add 2-4 emoji that fit the content and the style, each next to the fact it illustrates (🤖 AI, 💰 money, 🔒 security, 🎮 games, 📉 decline...). Pick them for this channel's topics; do not reuse one generic set everywhere.
+- No sound effects or burps.
 
 STYLE - stay in character:
 {style}"""
@@ -37,13 +41,24 @@ STYLE - stay in character:
 HIGHLIGHTS_TASK = """
 
 From the channel digests above, pick the 3 most important items across all channels.
-Format: exactly 3 lines in {language}, each starts with "• ", at most 40 words, ends with the channel name in parentheses. No intro, no Markdown, no source numbers, no repeated jokes.
+Format: exactly 3 lines in {language}, each starts with "• " and one emoji that fits its topic, at most 40 words, ends with the channel name in parentheses. No intro, no Markdown, no source numbers, no repeated jokes.
 
 STYLE - stay in character:
 {style}"""
 
 WORDS_PLAIN = 120  # the default "digest" style is a list
-WORDS_STYLED = 180  # voices need room for their tone
+WORDS_STYLED = 130  # room for the tone; 180 produced 3-4 paragraphs per channel in practice
+
+# Models sometimes still prepend a refusal-style note about imitating a voice; the retelling follows it.
+_DISCLAIMER = re.compile(
+    r"\A\s*(?:не могу|я не могу|i can(?:no|')t|i am unable|je ne peux|no puedo)[^\n]*(?:\n\s*)+", re.I
+)
+
+
+def strip_disclaimer(text: str) -> str:
+    stripped = _DISCLAIMER.sub("", text, count=1)
+    return stripped if stripped.strip() else text
+
 
 IMAGE_PROMPT = """Describe this image from a Telegram channel post in one or two sentences, in {language}.
 If it contains text, a chart or a screenshot, give the key text or numbers. If it is a decorative picture, say so in three words."""
@@ -92,13 +107,14 @@ class LLM:
             + "\n\n".join(blocks)
             + SUMMARY_TASK.format(language=self.language, style=style, words=words)
         )
-        return await self._chat(
+        text = await self._chat(
             self.model,
             [
                 {"role": "system", "content": SUMMARY_SYSTEM},
                 {"role": "user", "content": user},
             ],
         )
+        return strip_disclaimer(text)
 
     async def highlights(self, sections: list[tuple[str, str]], style: str) -> str:
         user = "\n\n".join(f"## {title}\n{summary}" for title, summary in sections)
