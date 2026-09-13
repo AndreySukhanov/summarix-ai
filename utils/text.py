@@ -18,15 +18,18 @@ _NUM = re.compile(r"\d+")
 def link_refs(summary: str, posts: list[Post]) -> str:
     """Escape model text for HTML and replace [n] citations with links to the posts."""
     escaped = html.escape(summary, quote=False)
+    seen: set[int] = set()  # a post already linked is not linked again: "(1) ... (1) ... (1)" is noise
 
     def replace(match: re.Match) -> str:
         links = []
         for n in dict.fromkeys(int(x) for x in _NUM.findall(match.group(0))):
-            if 1 <= n <= len(posts):
+            if 1 <= n <= len(posts) and n not in seen:
+                seen.add(n)
                 links.append(f'<a href="{html.escape(posts[n - 1].link)}">{n}</a>')
         return f" ({', '.join(links)})" if links else ""
 
-    return _REF_RUN.sub(replace, escaped)
+    linked = _REF_RUN.sub(replace, escaped)
+    return re.sub(r"\n[ \t​]*(?:\n[ \t​]*)+", "\n\n", linked).strip()  # at most one blank line
 
 
 def split_message(text: str, limit: int = TELEGRAM_LIMIT) -> list[str]:

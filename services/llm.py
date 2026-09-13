@@ -31,8 +31,9 @@ Format:
 - Facts only from the posts - the style changes how you tell them, never what happened. Skip ads and cross-promotion.
 - After a key fact, put the source post number in square brackets, e.g. [2]. Only after key facts, not after every sentence. Never write links.
 - This retelling is one of many channels the reader sees back to back in one digest. Every channel must sound fresh: use at most one or two signature devices of the style here, no stock opening or closing line, no joke you would reuse for another channel.
+- Opening move for this channel: {opening}.
 - Start with the retelling itself: no disclaimers, no remarks about the style or the voice.
-- Add 2-4 emoji that fit the content and the style, each next to the fact it illustrates (🤖 AI, 💰 money, 🔒 security, 🎮 games, 📉 decline...). Pick them for this channel's topics; do not reuse one generic set everywhere.
+- Add 2-4 emoji that fit the content and the style, each next to the fact it illustrates (💰 money, 🔒 security, 🎮 games, 📉 decline, 🎬 video...). Choose by the specific topic; skip the generic 🤖 unless the post is literally about robots.
 - No sound effects or burps.
 
 STYLE - stay in character:
@@ -45,6 +46,20 @@ Format: exactly 3 lines in {language}, each starts with "• " and one emoji tha
 
 STYLE - stay in character:
 {style}"""
+
+# Channels are summarized in separate calls that cannot see each other, so "don't repeat yourself"
+# alone does not stop every channel opening with the same trick. Rotating the opening makes the
+# variety mechanical.
+OPENINGS = [
+    "a short verdict on the situation in five words or fewer",
+    "a pointed question to the reader",
+    "the single most surprising fact, stated flat",
+    "a comparison with something from everyday life",
+    "the consequence first, then what caused it",
+    "a mini-story: who did what, and what came of it",
+    "a number or date from the posts that says it all",
+    "mock agreement with the channel that one detail then undermines",
+]
 
 WORDS_PLAIN = 120  # the default "digest" style is a list
 WORDS_STYLED = 130  # room for the tone; 180 produced 3-4 paragraphs per channel in practice
@@ -93,7 +108,9 @@ class LLM:
             ],
         )
 
-    async def summarize_channel(self, title: str, posts: list[Post], style: str, words: int = WORDS_PLAIN) -> str:
+    async def summarize_channel(
+        self, title: str, posts: list[Post], style: str, words: int = WORDS_PLAIN, index: int | None = None
+    ) -> str:
         blocks = []
         for i, post in enumerate(posts, start=1):
             lines = [f"[{i}] {post.date:%Y-%m-%d %H:%M}"]
@@ -105,7 +122,12 @@ class LLM:
         user = (
             f"Posts from the Telegram channel \"{title}\" ({len(posts)}):\n\n"
             + "\n\n".join(blocks)
-            + SUMMARY_TASK.format(language=self.language, style=style, words=words)
+            + SUMMARY_TASK.format(
+                language=self.language,
+                style=style,
+                words=words,
+                opening="straight to the first point" if index is None else OPENINGS[index % len(OPENINGS)],
+            )
         )
         text = await self._chat(
             self.model,
