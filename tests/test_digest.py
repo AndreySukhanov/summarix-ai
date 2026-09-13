@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest_asyncio
 
-from bot.handlers import OwnerOnly
+from bot.handlers import OwnerOnly, extract_refs
 from database.db import add_channel, init_models, last_run, list_channels, make_sessionmaker
 from services.digest import DigestService
 from services.reader import ChannelInfo
@@ -124,6 +124,12 @@ async def test_highlights_only_with_two_or_more_channels(sessions):
     text = "\n".join((await service(sessions, reader, llm).build(now=NOW)).messages)
     assert "<b>Highlights</b>" in text and "• Big news (Tech)" in text
     assert '<a href="https://t.me/c/2/3">1</a>' in text  # private channel link
+
+
+def test_plain_message_links_are_found():
+    text = "вот папка https://t.me/addlist/AbC_1 и ещё @durov_news, спасибо"
+    assert extract_refs(text) == ["https://t.me/addlist/AbC_1", "@durov_news"]
+    assert extract_refs("просто текст") == []
 
 
 async def test_owner_only_middleware_drops_strangers():
