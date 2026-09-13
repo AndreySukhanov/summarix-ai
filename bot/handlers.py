@@ -15,7 +15,6 @@ from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import (
     CallbackQuery,
-    InlineKeyboardButton,
     InlineKeyboardMarkup,
     LinkPreviewOptions,
     Message,
@@ -28,11 +27,11 @@ from bot.keyboards import (
     delete_confirm_keyboard,
     digest_menu,
     digest_period_menu,
-    grid,
     group_keyboard,
     group_title,
     groups_keyboard,
     main_menu,
+    styles_keyboard,
 )
 from bot.texts import t
 from database.db import (
@@ -348,10 +347,32 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
         await call.message.edit_text(t(lang, "digest_choose_group"), reply_markup=await digest_keyboard(lang))
         await call.answer()
 
+    async def current_style(lang: str) -> tuple[str, str]:
+        async with sessions() as db:
+            prefs = await get_settings(db, defaults)
+        return prefs.style, style_title(prefs.style, lang) + (" ✍️" if prefs.custom_prompt else "")
+
+    @router.message(F.text.in_(button_texts("menu_style")))
+    async def btn_style(message: Message, lang: str) -> None:
+        key, title = await current_style(lang)
+        await message.answer(
+            t(lang, "style_current", style=html.escape(title)), reply_markup=styles_keyboard(lang, key, "sty:")
+        )
+
+    @router.callback_query(F.data.startswith("sty:"))
+    async def cb_style_pick(call: CallbackQuery, lang: str) -> None:
+        key = call.data.split(":", 1)[1]
+        if key in STYLES:
+            async with sessions() as db:
+                await update_settings(db, defaults, style=key, custom_prompt=None)
+        _, title = await current_style(lang)
+        await call.message.edit_text(t(lang, "style_set", style=html.escape(title)))
+        await call.answer()
+
     @router.callback_query(F.data == "dg:style")
     async def cb_digest_styles(call: CallbackQuery, lang: str) -> None:
-        buttons = [InlineKeyboardButton(text=style_title(k, lang), callback_data=f"dgs:{k}") for k in STYLES]
-        await call.message.edit_text(t(lang, "choose_style"), reply_markup=InlineKeyboardMarkup(inline_keyboard=grid(buttons, 2)))
+        key, _ = await current_style(lang)
+        await call.message.edit_text(t(lang, "choose_style"), reply_markup=styles_keyboard(lang, key, "dgs:"))
         await call.answer()
 
     @router.callback_query(F.data.startswith("dgs:"))
@@ -374,8 +395,10 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
                 await call.answer()
                 return
             title = group_title(group, lang)
+        _, style = await current_style(lang)
         await call.message.edit_text(
-            t(lang, "digest_choose_period", title=html.escape(title)), reply_markup=digest_period_menu(lang, group_id)
+            t(lang, "digest_choose_period", title=html.escape(title)),
+            reply_markup=digest_period_menu(lang, group_id, style),
         )
         await call.answer()
 
