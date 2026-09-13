@@ -53,7 +53,13 @@ def test_link_refs_escapes_model_text_and_links_only_real_posts():
     assert "&lt;b&gt;Price&lt;/b&gt; up &amp; more" in out
     assert '(<a href="https://t.me/news/10">1</a>, <a href="https://t.me/news/11">2</a>)' in out
     assert "[7]" not in out
-    assert out.endswith('Other (<a href="https://t.me/news/11">2</a>, <a href="https://t.me/news/10">1</a>)')
+    assert out.endswith("• Other")  # both posts were already linked above: no repeated citation
+
+
+def test_link_refs_collapses_blank_lines():
+    channel = ChannelInfo(-1001, "x", "news")
+    out = link_refs("\n\nFirst [1]\n\n \n\nSecond\n", [make_post(channel, 10, "a")])
+    assert out == 'First (<a href="https://t.me/news/10">1</a>)\n\nSecond'
 
 
 def test_split_message_respects_limit_and_keeps_lines_whole():

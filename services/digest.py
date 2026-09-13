@@ -6,7 +6,6 @@ send never swallows posts.
 """
 import asyncio
 import html
-import re
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -97,7 +96,7 @@ class DigestService:
         since = now - (timedelta(hours=window_hours) if recap else self.lookback)
         gate = asyncio.Semaphore(self.concurrency)
 
-        async def process(channel) -> _Section | None:
+        async def process(index: int, channel) -> _Section | None:
             info = ChannelInfo(channel.peer_id, channel.title, channel.username)
             async with gate:
                 try:
@@ -118,7 +117,9 @@ class DigestService:
                             result.images += 1
                             post.image_descriptions.append(await self.llm.describe_image(image))
                         post.images.clear()
-                    summary = await self.llm.summarize_channel(channel.title, posts, style, words)
+                    summary = await self.llm.summarize_channel(
+                        channel.title, posts, style, words, None if plain else index
+                    )
                 except Exception as exc:  # one broken channel must not kill the whole digest
                     logger.warning("channel %s failed: %s", channel.title, exc)
                     result.errors.append(f"{channel.title} ({exc})")
@@ -126,7 +127,7 @@ class DigestService:
             return _Section(info, posts, summary)
 
         # gather keeps the channel order of the list, whatever finishes first
-        sections = [s for s in await asyncio.gather(*(process(c) for c in channels)) if s]
+        sections = [s for s in await asyncio.gather(*(process(i, c) for i, c in enumerate(channels))) if s]
         for s in sections:
             result.posts += len(s.posts)
             if not recap:
@@ -182,8 +183,7 @@ class DigestService:
                 name = html.escape(s.channel.title, quote=False)
                 if s.channel.username:
                     name = f'<a href="https://t.me/{s.channel.username}">{name}</a>'
-                body = re.sub(r"\n{3,}", "\n\n", link_refs(s.summary, s.posts).strip())
-                parts += ["", f"<b>{name}</b>", body]
+                parts += ["", f"<b>{name}</b>", link_refs(s.summary, s.posts)]
         if result.errors:
             parts += ["", t(self.lang, "failed_channels", items=html.escape(", ".join(result.errors), quote=False))]
         return "\n".join(parts)
