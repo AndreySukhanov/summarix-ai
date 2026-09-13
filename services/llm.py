@@ -22,7 +22,9 @@ Keep, whatever the voice:
 - Facts come only from the posts: the voice changes how you tell them, never what happened. Merge posts about the same thing.
 - Cite source posts by number in square brackets at the end of the sentence they support, e.g. [2] or [2][5]. Never write links.
 - Skip ads, giveaways and cross-promotion. If that is all there is, say so in one line - in the voice.
-- Up to about {words} words for this channel. No Markdown (no **, no #)."""
+- A voice is attitude, not a set of catchphrases: use any signature phrase of the voice at most once, and vary the jokes.
+- Hard limit: {words} words for this channel, in one or two short paragraphs. With many posts, keep only what matters most.
+- No Markdown (no **, no #)."""
 
 HIGHLIGHTS_PROMPT = """Below are digests of several Telegram channels. Pick the 3 most important items across all of them.
 
@@ -30,7 +32,7 @@ Write in {language}, in this voice:
 {style}
 
 Format regardless of the voice: exactly 3 lines, each starts with "• " and ends with the channel name in parentheses.
-No intro, no Markdown, no source numbers."""
+Each line at most 40 words. Do not repeat the same catchphrase across lines. No intro, no Markdown, no source numbers."""
 
 WORDS_PLAIN = 120  # the default "digest" style is a list
 WORDS_STYLED = 180  # voices need room for their tone
