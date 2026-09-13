@@ -10,29 +10,37 @@ from services.reader import Post
 
 POST_CHARS_IN_PROMPT = 1500
 
-# The voice goes first and is framed as the reader's choice: placed after a block of "hard rules"
-# it read as an afterthought and every style collapsed into the same neutral summary.
-SUMMARY_PROMPT = """You retell what one Telegram channel posted, for a reader who chose a specific voice for their digest.
+# Layout copied from the original Summarix bot, where styles worked: a short role in the system
+# message, then in the user message the posts, the task, the format - and the style LAST, right
+# before the model starts writing. With the style in the system prompt ahead of 30 posts and a
+# "cite every sentence" rule, every voice faded into a neutral news summary.
+SUMMARY_SYSTEM = (
+    "You are a sharp content curator with a strong voice. You turn Telegram channel posts into short, "
+    "vivid retellings: nothing important is lost, nothing boring remains. Stay fully in character "
+    "for the requested style from the first word to the last."
+)
 
-THE VOICE - the reader picked it on purpose. Commit to it in every sentence; do not drift back into a neutral news summary:
-{style}
+SUMMARY_TASK = """
 
-Keep, whatever the voice:
-- Write in {language}.
-- Facts come only from the posts: the voice changes how you tell them, never what happened. Merge posts about the same thing.
-- Cite source posts by number in square brackets at the end of the sentence they support, e.g. [2] or [2][5]. Never write links.
-- Skip ads, giveaways and cross-promotion. If that is all there is, say so in one line - in the voice.
-- A voice is attitude, not a set of catchphrases: use any signature phrase of the voice at most once, and vary the jokes.
-- Hard limit: {words} words for this channel, in one or two short paragraphs. With many posts, keep only what matters most.
-- No Markdown (no **, no #)."""
+Retell these posts so the reader saves most of the reading time but misses nothing important. Be concise, never dry: the style below matters as much as the facts.
 
-HIGHLIGHTS_PROMPT = """Below are digests of several Telegram channels. Pick the 3 most important items across all of them.
+Format:
+- Write in {language}. Plain text, no Markdown; emoji and line breaks are fine.
+- At most {words} words, one or two short paragraphs. With many posts, keep only what matters most.
+- Facts only from the posts - the style changes how you tell them, never what happened. Skip ads and cross-promotion.
+- After a key fact, put the source post number in square brackets, e.g. [2]. Only after key facts, not after every sentence. Never write links.
+- Do not repeat the same joke or catchphrase twice.
 
-Write in {language}, in this voice:
-{style}
+STYLE - stay in character:
+{style}"""
 
-Format regardless of the voice: exactly 3 lines, each starts with "• " and ends with the channel name in parentheses.
-Each line at most 40 words. Do not repeat the same catchphrase across lines. No intro, no Markdown, no source numbers."""
+HIGHLIGHTS_TASK = """
+
+From the channel digests above, pick the 3 most important items across all channels.
+Format: exactly 3 lines in {language}, each starts with "• ", at most 40 words, ends with the channel name in parentheses. No intro, no Markdown, no source numbers, no repeated jokes.
+
+STYLE - stay in character:
+{style}"""
 
 WORDS_PLAIN = 120  # the default "digest" style is a list
 WORDS_STYLED = 180  # voices need room for their tone
@@ -79,11 +87,15 @@ class LLM:
                 lines.append(text)
             lines += [f"(image: {d})" for d in post.image_descriptions]
             blocks.append("\n".join(lines))
-        user = f"Channel: {title}\n\n" + "\n\n".join(blocks)
+        user = (
+            f"Posts from the Telegram channel \"{title}\" ({len(posts)}):\n\n"
+            + "\n\n".join(blocks)
+            + SUMMARY_TASK.format(language=self.language, style=style, words=words)
+        )
         return await self._chat(
             self.model,
             [
-                {"role": "system", "content": SUMMARY_PROMPT.format(language=self.language, style=style, words=words)},
+                {"role": "system", "content": SUMMARY_SYSTEM},
                 {"role": "user", "content": user},
             ],
         )
@@ -93,8 +105,8 @@ class LLM:
         return await self._chat(
             self.model,
             [
-                {"role": "system", "content": HIGHLIGHTS_PROMPT.format(language=self.language, style=style)},
-                {"role": "user", "content": user},
+                {"role": "system", "content": SUMMARY_SYSTEM},
+                {"role": "user", "content": user + HIGHLIGHTS_TASK.format(language=self.language, style=style)},
             ],
         )
 

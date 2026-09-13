@@ -75,8 +75,7 @@ def default_reply(kwargs) -> str:
     content = messages[-1]["content"]
     if isinstance(content, list):
         return "A chart with revenue up 20%"
-    system = messages[0]["content"]
-    if "most important items" in system:
+    if "most important items" in content:
         return "• Big news (Tech)"
     return "• Summary of the posts [1][2]"
 
