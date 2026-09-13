@@ -1,0 +1,7 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data   # SQLite database and the Telegram session file
+    restart: unless-stopped
