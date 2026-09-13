@@ -29,10 +29,11 @@ def main_menu(lang: str) -> ReplyKeyboardMarkup:
     )
 
 
-def digest_menu(lang: str) -> InlineKeyboardMarkup:
+def digest_menu(lang: str, style: str) -> InlineKeyboardMarkup:
     b = lambda key, data: InlineKeyboardButton(text=t(lang, key), callback_data=f"dg:{data}")  # noqa: E731
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "btn_digest_style", style=style), callback_data="dg:style")],
             [b("btn_unread", "new")],
             [b("btn_24h", "24"), b("btn_48h", "48"), b("btn_7d", "168")],
         ]
