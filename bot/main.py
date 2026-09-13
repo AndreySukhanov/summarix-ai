@@ -34,6 +34,8 @@ async def main() -> None:
     await client.connect()
     if not await client.is_user_authorized():
         raise SystemExit("Telegram account is not logged in. Run once: python -m scripts.login")
+    if (await client.get_me()).bot:
+        raise SystemExit("The session belongs to a bot, which cannot read channels. Delete it and log in with your phone.")
 
     llm = LLM(
         AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url),
