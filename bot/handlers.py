@@ -73,6 +73,24 @@ def build_router(
         key = "added" if created else "already"
         await message.answer(t(lang, key, title=html.escape(channel.title)))
 
+    async def add_folder(message: Message, slug: str, shown: str) -> None:
+        try:
+            folder = await reader.resolve_folder(slug)
+        except (ReaderError, ValueError) as exc:
+            await message.answer(t(lang, "add_failed", ref=html.escape(shown), reason=html.escape(str(exc))))
+            return
+        added = existing = 0
+        async with sessions() as db:
+            for info in folder.channels:
+                _, created = await add_channel(db, info.peer_id, info.title, info.username)
+                added += created
+                existing += not created
+            await db.commit()
+        lines = [t(lang, "folder_added", title=html.escape(folder.title or slug), added=added, existing=existing)]
+        if folder.skipped:
+            lines.append(t(lang, "folder_skipped", items=html.escape(", ".join(folder.skipped))))
+        await message.answer("\n".join(lines))
+
     @router.message(Command("start", "help"))
     async def cmd_help(message: Message) -> None:
         await message.answer(t(lang, "help", time=digest_time, tz=timezone_name))
@@ -89,7 +107,10 @@ def build_router(
             except RefError as exc:
                 await message.answer(t(lang, "add_failed", ref=html.escape(item), reason=html.escape(str(exc))))
                 continue
-            await add_ref(message, ref, item)
+            if ref.kind == "folder":
+                await add_folder(message, ref.value, item)
+            else:
+                await add_ref(message, ref, item)
 
     @router.message(F.forward_origin.as_("origin"))
     async def forwarded(message: Message, origin: Any) -> None:

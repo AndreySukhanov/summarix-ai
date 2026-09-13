@@ -37,12 +37,21 @@ class Post:
     image_descriptions: list[str] = field(default_factory=list)
 
 
+@dataclass
+class Folder:
+    title: str
+    channels: list[ChannelInfo]
+    skipped: list[str]  # private channels the account has not joined
+
+
 class ReaderError(RuntimeError):
     pass
 
 
 class Reader(Protocol):
     async def resolve(self, ref: ChannelRef) -> ChannelInfo: ...
+
+    async def resolve_folder(self, slug: str) -> Folder: ...
 
     async def fetch_posts(
         self, channel: ChannelInfo, *, after_id: int, since: datetime, limit: int, with_images: bool
@@ -100,6 +109,28 @@ class TelethonReader:
         if not getattr(entity, "broadcast", False) and not getattr(entity, "megagroup", False):
             raise ReaderError("this is not a channel or a group")
         return ChannelInfo(utils.get_peer_id(entity), entity.title, getattr(entity, "username", None))
+
+    async def resolve_folder(self, slug: str) -> Folder:
+        """A shared folder (t.me/addlist/...). Public channels are readable without joining;
+        private ones only if the account is already a member."""
+        from telethon import utils
+        from telethon.tl.functions.chatlists import CheckChatlistInviteRequest
+
+        try:
+            invite = await self.client(CheckChatlistInviteRequest(slug))
+        except Exception as exc:
+            raise ReaderError(f"folder link is invalid or expired ({type(exc).__name__})") from exc
+
+        channels, skipped = [], []
+        for chat in invite.chats:
+            if not getattr(chat, "broadcast", False) and not getattr(chat, "megagroup", False):
+                continue  # basic groups, forbidden channels
+            username = getattr(chat, "username", None)
+            if getattr(chat, "left", True) and not username:
+                skipped.append(chat.title)
+                continue
+            channels.append(ChannelInfo(utils.get_peer_id(chat), chat.title, username))
+        return Folder(getattr(invite, "title", None) or "", channels, skipped)
 
     async def fetch_posts(
         self, channel: ChannelInfo, *, after_id: int, since: datetime, limit: int, with_images: bool
