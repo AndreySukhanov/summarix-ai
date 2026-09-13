@@ -33,20 +33,34 @@ def link_refs(summary: str, posts: list[Post]) -> str:
 
 
 def split_message(text: str, limit: int = TELEGRAM_LIMIT) -> list[str]:
-    """Split on blank lines, then lines, then spaces. Links live inside single lines, so tags stay whole."""
+    """Split into Telegram-sized messages at the widest possible seam.
+
+    Blocks separated by a blank line are kept whole when they fit, so a channel title never
+    ends one message while its text starts the next. Only a block longer than the limit is
+    cut by lines, then by spaces. Links live inside single lines, so tags stay whole.
+    """
     chunks: list[str] = []
     current = ""
-    for piece in _pieces(text, limit):
-        candidate = f"{current}\n{piece}" if current else piece
+
+    def push(piece: str, sep: str) -> None:
+        nonlocal current
+        candidate = f"{current}{sep}{piece}" if current else piece
         if len(candidate) <= limit:
             current = candidate
-        else:
-            if current:
-                chunks.append(current)
-            current = piece
+            return
+        if current:
+            chunks.append(current)
+        current = piece
+
+    for block in text.split("\n\n"):
+        if len(block) <= limit:
+            push(block, "\n\n")
+            continue
+        for line in _pieces(block, limit):
+            push(line, "\n")
     if current:
         chunks.append(current)
-    return chunks
+    return [c.strip("\n") for c in chunks if c.strip()]
 
 
 def _pieces(text: str, limit: int) -> list[str]:

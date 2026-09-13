@@ -26,14 +26,14 @@ SUMMARY_TASK = """
 Retell these posts so the reader saves most of the reading time but misses nothing important. Be concise, never dry: the style below matters as much as the facts.
 
 Format:
-- Write in {language}. Plain text, no Markdown; emoji and line breaks are fine.
+- Write in {language} only. The style description may quote slang in another language: never paste it as is, use natural {language} slang with the same attitude. Plain text, no Markdown; line breaks are fine.
 - At most {words} words, one or two short paragraphs. With many posts, keep only what matters most.
 - Facts only from the posts - the style changes how you tell them, never what happened. Skip ads and cross-promotion.
 - After a key fact, put the source post number in square brackets, e.g. [2]. Only after key facts, not after every sentence. Never write links.
 - This retelling is one of many channels the reader sees back to back in one digest. Every channel must sound fresh: use at most one or two signature devices of the style here, no stock opening or closing line, no joke you would reuse for another channel.
 - Opening move for this channel: {opening}.
 - Start with the retelling itself: no disclaimers, no remarks about the style or the voice.
-- Add 2-4 emoji that fit the content and the style, each next to the fact it illustrates (💰 money, 🔒 security, 🎮 games, 📉 decline, 🎬 video...). Choose by the specific topic; skip the generic 🤖 unless the post is literally about robots.
+- Add 2-4 emoji, each next to the fact it illustrates, chosen by the specific topic (💰 money, 🔒 security, 🎮 games, 📉 decline, 🎬 video...). At most one of them may be a mood emoji the style likes (💀 💅 🤡 🔥 ✨ and similar), and only where it lands; skip the generic 🤖 unless the post is literally about robots.
 - No sound effects or burps.
 
 STYLE - stay in character:

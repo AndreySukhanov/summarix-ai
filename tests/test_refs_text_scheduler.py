@@ -56,6 +56,19 @@ def test_link_refs_escapes_model_text_and_links_only_real_posts():
     assert out.endswith("• Other")  # both posts were already linked above: no repeated citation
 
 
+def test_split_message_never_orphans_a_channel_title():
+    sections = []
+    for i in range(12):
+        sections.append(f"➡️ <b>Channel {i}</b>\n" + ("word " * 60).strip() + f"\n\nsecond paragraph {i}")
+    chunks = split_message("<b>Digest</b>\n\n" + "\n\n".join(sections), limit=900)
+    assert all(len(c) <= 900 for c in chunks)
+    for chunk in chunks:
+        assert not chunk.rstrip().endswith("</b>")  # a title always travels with its text
+        assert not chunk.startswith("\n") and not chunk.endswith("\n")
+    joined = "\n\n".join(chunks)
+    assert all(f"Channel {i}" in joined and f"second paragraph {i}" in joined for i in range(12))
+
+
 def test_link_refs_collapses_blank_lines():
     channel = ChannelInfo(-1001, "x", "news")
     out = link_refs("\n\nFirst [1]\n\n \n\nSecond\n", [make_post(channel, 10, "a")])
