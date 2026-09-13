@@ -3,6 +3,7 @@ Commands. Everything here runs only for the owner - see OwnerOnly.
 """
 import html
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
@@ -101,6 +102,9 @@ def build_router(
         if not raw:
             await message.answer(t(lang, "add_usage"))
             return
+        await add_items(message, raw)
+
+    async def add_items(message: Message, raw: list[str]) -> None:
         for item in raw:
             try:
                 ref = parse_channel_ref(item)
@@ -193,4 +197,20 @@ def build_router(
             )
         )
 
+    @router.message(F.text & ~F.text.startswith("/"))
+    async def plain_links(message: Message) -> None:
+        """A message with just links or @names is treated as /add - nobody remembers the command."""
+        items = extract_refs(message.text)
+        if items:
+            await add_items(message, items)
+        else:
+            await message.answer(t(lang, "add_usage"))
+
     return router
+
+
+_REF_IN_TEXT = re.compile(r"(?:https?://)?(?:t\.me|telegram\.me)/\S+|@[A-Za-z][A-Za-z0-9_]{3,31}", re.I)
+
+
+def extract_refs(text: str | None) -> list[str]:
+    return _REF_IN_TEXT.findall(text or "")
