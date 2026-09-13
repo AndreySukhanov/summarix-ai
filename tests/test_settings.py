@@ -54,7 +54,7 @@ async def test_digest_uses_style_language_and_custom_prompt_from_settings(sessio
     await svc.build(now=NOW)
     summary_request = next(r for r in client.requests if "Posts from the Telegram channel" in r["messages"][-1]["content"])
     user = summary_request["messages"][-1]["content"]
-    assert "Write in English." in user
+    assert "Write in English only." in user
     assert "put the source post number in square brackets" in user  # hard rules survive any style
     assert "130 words" in user
     assert "emoji" in user and "burps" in user
