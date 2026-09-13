@@ -34,9 +34,10 @@ async def test_settings_row_is_seeded_once_then_updated(sessions):
 
 def test_style_prompt_follows_digest_language_and_custom_override():
     assert len(STYLES) == 13
-    assert style_prompt("rick", "ru").startswith("Пиши как циничный гений")
+    assert style_prompt("rick", "ru").startswith("Ты - Рик Санчез в русской озвучке Сыендука")
     assert style_prompt("rick", "es").startswith("Escribe como un científico genio")
-    assert style_prompt("rick", "xx").startswith("Write as a cynical genius")  # unknown language -> English
+    assert style_prompt("rick", "xx").startswith("You are a burned-out genius")  # unknown language -> English
+    assert "я гений" not in style_prompt("rick", "ru").split("словам")[0]  # no instruction to brag
     assert style_prompt("rick", "ru", custom_prompt="  только цифры  ") == "только цифры"
     assert style_prompt("unknown", "en") == STYLES["digest"]["prompt"]["en"]
 
@@ -51,18 +52,19 @@ async def test_digest_uses_style_language_and_custom_prompt_from_settings(sessio
     svc = DigestService(sessions, reader, llm, defaults=DEFAULTS)
 
     await svc.build(now=NOW)
-    system = client.requests[-1]["messages"][0]["content"]
-    assert "Write in English." in system
-    assert "TL;DR" in system
-    assert "Cite source posts by number" in system  # hard rules survive any style
-    assert system.index("THE VOICE") < system.index("Cite source posts")  # voice first
-    assert "180 words" in system
+    summary_request = next(r for r in client.requests if "Posts from the Telegram channel" in r["messages"][-1]["content"])
+    user = summary_request["messages"][-1]["content"]
+    assert "Write in English." in user
+    assert "put the source post number in square brackets" in user  # hard rules survive any style
+    assert "180 words" in user
+    assert user.index("news") < user.index("STYLE") < user.index("TL;DR")  # posts first, style last
+    assert user.rstrip().endswith(STYLES["tldr"]["prompt"]["en"])
 
     async with sessions() as db:
         await update_settings(db, DEFAULTS, custom_prompt="Only numbers, like a trader.")
     await svc.build(now=NOW)
-    system = client.requests[-1]["messages"][0]["content"]
-    assert "Only numbers, like a trader." in system and "TL;DR" not in system
+    user = client.requests[-1]["messages"][-1]["content"]
+    assert user.rstrip().endswith("Only numbers, like a trader.") and "TL;DR" not in user
 
 
 @pytest.mark.parametrize("raw, expected", [("08:30", "08:30"), ("8:05", "08:05"), ("23.59", "23:59"), ("24:00", None), ("abc", None)])
