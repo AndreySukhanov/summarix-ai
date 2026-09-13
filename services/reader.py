@@ -131,7 +131,23 @@ class TelethonReader:
                 skipped.append(chat.title)
                 continue
             channels.append(ChannelInfo(utils.get_peer_id(chat), chat.title, username))
-        return Folder(getattr(invite, "title", None) or "", channels, skipped)
+        return Folder(await self._folder_title(invite), channels, skipped)
+
+    async def _folder_title(self, invite: Any) -> str:
+        """A not-yet-joined folder carries its title; an already joined one only a filter id."""
+        title = getattr(invite, "title", None)
+        if not title and getattr(invite, "filter_id", None) is not None:
+            from telethon.tl.functions.messages import GetDialogFiltersRequest
+
+            try:
+                result = await self.client(GetDialogFiltersRequest())
+                filters = getattr(result, "filters", result)
+                match = next((f for f in filters if getattr(f, "id", None) == invite.filter_id), None)
+                title = getattr(match, "title", None)
+            except Exception as exc:  # the title is cosmetic: fall back to the slug
+                logger.warning("could not read folder title: %s", exc)
+        title = getattr(title, "text", title)  # newer layers wrap it in TextWithEntities
+        return str(title or "")
 
     async def fetch_posts(
         self, channel: ChannelInfo, *, after_id: int, since: datetime, limit: int, with_images: bool

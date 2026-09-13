@@ -12,14 +12,18 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from bot.texts import t
-from database.db import SessionMaker, get_channel, get_settings, list_channels
-from database.models import DigestRun
+from database.db import SessionMaker, get_channel, get_group, get_settings, group_channels, list_channels
+from database.models import DigestRun, Group
 from services.llm import LLM, WORDS_PLAIN, WORDS_STYLED, Usage
 from services.reader import ChannelInfo, Post, Reader
 from services.styles import DEFAULT_STYLE, language_name, style_prompt
 from utils.text import link_refs, split_message
 
 logger = logging.getLogger(__name__)
+
+
+def group_display_title(group: Group, lang: str) -> str:
+    return t(lang, "group_manual") if group.kind == "manual" else f"📁 {group.title}"
 
 
 @dataclass
@@ -30,6 +34,7 @@ class DigestResult:
     images: int = 0
     errors: list[str] = field(default_factory=list)
     read_marks: dict[int, int] = field(default_factory=dict)  # peer_id -> newest message id seen
+    group_id: int | None = None
 
 
 @dataclass
@@ -74,24 +79,29 @@ class DigestService:
         self.tz = ZoneInfo(self.defaults["timezone"])
         self.lock = asyncio.Lock()
 
-    async def build(self, *, window_hours: int | None = None, now: datetime | None = None) -> DigestResult:
-        """window_hours=None: unread posts (to be marked read). A number: a recap that marks nothing."""
+    async def build(
+        self, *, window_hours: int | None = None, now: datetime | None = None, group_id: int | None = None
+    ) -> DigestResult:
+        """window_hours=None: unread posts (to be marked read). A number: a recap that marks nothing.
+        group_id: only that group's channels, with the group name under the title; None: every channel."""
         now = now or datetime.now(timezone.utc)
         self.llm.usage = Usage()  # per-run token count for the run log
         async with self.sessions() as db:
-            channels = await list_channels(db)
             prefs = await get_settings(db, self.defaults)
+            group = await get_group(db, group_id) if group_id is not None else None
+            channels = await group_channels(db, group_id) if group_id is not None else await list_channels(db)
         self.tz = ZoneInfo(prefs.timezone)
         self.lang = prefs.ui_language or self.lang
+        group_title = group_display_title(group, self.lang) if group else None
         self.llm.language = language_name(prefs.language)
         style = style_prompt(prefs.style, prefs.language, prefs.custom_prompt)
         plain = prefs.style == DEFAULT_STYLE and not prefs.custom_prompt
         words = WORDS_PLAIN if plain else WORDS_STYLED
         if not channels:
-            return DigestResult(messages=[t(self.lang, "no_channels")])
+            return DigestResult(messages=[t(self.lang, "no_channels")], group_id=group_id)
 
         budget = {"images": self.max_images if self.describe_images else 0}
-        result = DigestResult(messages=[])
+        result = DigestResult(messages=[], group_id=group_id)
         recap = window_hours is not None
         since = now - (timedelta(hours=window_hours) if recap else self.lookback)
         gate = asyncio.Semaphore(self.concurrency)
@@ -141,7 +151,7 @@ class DigestService:
             except Exception as exc:
                 logger.warning("highlights failed: %s", exc)
 
-        result.messages = split_message(self._compose(sections, highlights, result, window_hours, now))
+        result.messages = split_message(self._compose(sections, highlights, result, window_hours, now, group_title))
         return result
 
     async def commit(self, result: DigestResult, trigger: str) -> None:
@@ -164,7 +174,13 @@ class DigestService:
             await db.commit()
 
     def _compose(
-        self, sections: list[_Section], highlights: str, result: DigestResult, window_hours: int | None, now: datetime
+        self,
+        sections: list[_Section],
+        highlights: str,
+        result: DigestResult,
+        window_hours: int | None,
+        now: datetime,
+        group_title: str | None = None,
     ) -> str:
         date = now.astimezone(self.tz).strftime("%d.%m.%Y")
         title = (
@@ -173,6 +189,8 @@ class DigestService:
             else t(self.lang, "digest_title", date=date)
         )
         parts = [title]
+        if group_title:
+            parts.append(html.escape(group_title, quote=False))
         if not sections:
             parts.append(t(self.lang, "nothing_new"))
         else:
