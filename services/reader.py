@@ -137,7 +137,10 @@ class TelethonReader:
     ) -> list[Post]:
         from telethon import errors
 
-        entity = await self._entity_by_id(channel.peer_id)
+        # Public channels by username: the account may not be subscribed, so the id is not in its cache.
+        entity = await self.client.get_entity(channel.username) if channel.username else await self._entity_by_id(
+            channel.peer_id
+        )
         raw = []
         try:
             async for message in self.client.iter_messages(entity, limit=limit, min_id=after_id):

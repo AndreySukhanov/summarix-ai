@@ -12,13 +12,16 @@ POST_CHARS_IN_PROMPT = 1500
 
 SUMMARY_PROMPT = """You write a personal digest of one Telegram channel for its reader.
 
-Rules:
+Hard rules - they hold whatever the style below says:
 - Write in {language}.
-- 2 to 6 bullet points, most important first. Each bullet starts with "• " and is one or two sentences.
-- Merge posts about the same thing into one bullet.
-- End every bullet with the numbers of its source posts in square brackets, e.g. [2][5].
-- Skip ads, giveaways and cross-promotion of other channels. If the posts are only that, write one bullet saying so.
-- Use only facts from the posts. No intro, no conclusion, no Markdown."""
+- After each point, cite its source posts by number in square brackets, e.g. [2] or [2][5]. Never write links or URLs.
+- Use only facts from the posts. Merge posts about the same thing.
+- Skip ads, giveaways and cross-promotion of other channels. If the posts are only that, say so in one line.
+- Keep it short: about 120 words at most for this channel.
+- No Markdown: no **bold**, no # headers. Plain text; emoji are fine if the style uses them.
+
+Style:
+{style}"""
 
 HIGHLIGHTS_PROMPT = """Below are digests of several Telegram channels.
 Pick the 3 most important items across all of them. Write in {language}.
@@ -58,7 +61,7 @@ class LLM:
             ],
         )
 
-    async def summarize_channel(self, title: str, posts: list[Post]) -> str:
+    async def summarize_channel(self, title: str, posts: list[Post], style: str) -> str:
         blocks = []
         for i, post in enumerate(posts, start=1):
             lines = [f"[{i}] {post.date:%Y-%m-%d %H:%M}"]
@@ -71,7 +74,7 @@ class LLM:
         return await self._chat(
             self.model,
             [
-                {"role": "system", "content": SUMMARY_PROMPT.format(language=self.language)},
+                {"role": "system", "content": SUMMARY_PROMPT.format(language=self.language, style=style)},
                 {"role": "user", "content": user},
             ],
         )

@@ -12,10 +12,11 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from bot.texts import t
-from database.db import SessionMaker, get_channel, list_channels
+from database.db import SessionMaker, get_channel, get_settings, list_channels
 from database.models import DigestRun
 from services.llm import LLM, Usage
 from services.reader import ChannelInfo, Post, Reader
+from services.styles import DEFAULT_STYLE, language_name, style_prompt
 from utils.text import link_refs, split_message
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class DigestService:
         describe_images: bool = True,
         max_images_per_run: int = 20,
         ui_language: str = "ru",
-        timezone_name: str = "Europe/Moscow",
+        defaults: dict | None = None,
         concurrency: int = 6,
     ):
         self.concurrency = concurrency
@@ -62,7 +63,14 @@ class DigestService:
         self.describe_images = describe_images
         self.max_images = max_images_per_run
         self.lang = ui_language
-        self.tz = ZoneInfo(timezone_name)
+        # seed for the settings row; after that /settings is the source of truth
+        self.defaults = defaults or {
+            "style": DEFAULT_STYLE,
+            "language": "ru",
+            "digest_time": "09:00",
+            "timezone": "Europe/Moscow",
+        }
+        self.tz = ZoneInfo(self.defaults["timezone"])
         self.lock = asyncio.Lock()
 
     async def build(self, *, window_hours: int | None = None, now: datetime | None = None) -> DigestResult:
@@ -71,6 +79,10 @@ class DigestService:
         self.llm.usage = Usage()  # per-run token count for the run log
         async with self.sessions() as db:
             channels = await list_channels(db)
+            prefs = await get_settings(db, self.defaults)
+        self.tz = ZoneInfo(prefs.timezone)
+        self.llm.language = language_name(prefs.language)
+        style = style_prompt(prefs.style, prefs.language, prefs.custom_prompt)
         if not channels:
             return DigestResult(messages=[t(self.lang, "no_channels")])
 
@@ -101,7 +113,7 @@ class DigestService:
                             result.images += 1
                             post.image_descriptions.append(await self.llm.describe_image(image))
                         post.images.clear()
-                    summary = await self.llm.summarize_channel(channel.title, posts)
+                    summary = await self.llm.summarize_channel(channel.title, posts, style)
                 except Exception as exc:  # one broken channel must not kill the whole digest
                     logger.warning("channel %s failed: %s", channel.title, exc)
                     result.errors.append(f"{channel.title} ({exc})")

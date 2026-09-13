@@ -29,7 +29,7 @@ async def seed(sessions, *channels):
 
 
 def service(sessions, reader, llm, **kw):
-    return DigestService(sessions, reader, llm, ui_language="en", timezone_name="Europe/Moscow", **kw)
+    return DigestService(sessions, reader, llm, ui_language="en", **kw)
 
 
 async def test_no_channels_message(sessions):

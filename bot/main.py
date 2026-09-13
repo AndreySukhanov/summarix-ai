@@ -10,12 +10,14 @@ from openai import AsyncOpenAI
 from telethon import TelegramClient
 
 from bot.handlers import OwnerOnly, build_router, send_digest
+from bot.settings_menu import build_settings_router
 from config.settings import Settings
-from database.db import init_models, make_sessionmaker
+from database.db import get_settings, init_models, make_sessionmaker
 from services.digest import DigestService
 from services.llm import LLM
 from services.reader import TelethonReader
 from services.scheduler import run_daily
+from services.styles import DEFAULT_STYLE
 
 logger = logging.getLogger("summarix")
 
@@ -41,9 +43,14 @@ async def main() -> None:
         AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url),
         settings.llm_model,
         vision_model=settings.vision_model,
-        language=settings.digest_language,
     )
     reader = TelethonReader(client)
+    defaults = {
+        "style": DEFAULT_STYLE,
+        "language": settings.digest_language,
+        "digest_time": settings.digest_time,
+        "timezone": settings.timezone,
+    }
     service = DigestService(
         sessions,
         reader,
@@ -53,21 +60,22 @@ async def main() -> None:
         describe_images=settings.describe_images,
         max_images_per_run=settings.max_images_per_run,
         ui_language=settings.ui_language,
-        timezone_name=settings.timezone,
+        defaults=defaults,
     )
 
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher()
     dp.message.outer_middleware(OwnerOnly(settings.owner_id))
     dp.callback_query.outer_middleware(OwnerOnly(settings.owner_id))
+    wake = asyncio.Event()
+    dp.include_router(build_settings_router(sessions=sessions, defaults=defaults, lang=settings.ui_language, wake=wake))
     dp.include_router(
         build_router(
             sessions=sessions,
             reader=reader,
             service=service,
             lang=settings.ui_language,
-            digest_time=settings.digest_time,
-            timezone_name=settings.timezone,
+            defaults=defaults,
             model=settings.llm_model,
         )
     )
@@ -75,8 +83,13 @@ async def main() -> None:
     async def scheduled() -> None:
         await send_digest(bot, settings.owner_id, service, window_hours=None, trigger="schedule")
 
-    scheduler = asyncio.create_task(run_daily(scheduled, settings.digest_time, settings.timezone))
-    logger.info("bot started; digest daily at %s %s", settings.digest_time, settings.timezone)
+    async def schedule() -> tuple[str, str]:
+        async with sessions() as db:
+            prefs = await get_settings(db, defaults)
+        return prefs.digest_time, prefs.timezone
+
+    scheduler = asyncio.create_task(run_daily(scheduled, schedule, wake))
+    logger.info("bot started")
     try:
         await dp.start_polling(bot)
     finally:
