@@ -51,7 +51,9 @@ class DigestService:
         max_images_per_run: int = 20,
         ui_language: str = "ru",
         timezone_name: str = "Europe/Moscow",
+        concurrency: int = 6,
     ):
+        self.concurrency = concurrency
         self.sessions = sessions
         self.reader = reader
         self.llm = llm
@@ -72,39 +74,46 @@ class DigestService:
         if not channels:
             return DigestResult(messages=[t(self.lang, "no_channels")])
 
-        images_left = self.max_images if self.describe_images else 0
+        budget = {"images": self.max_images if self.describe_images else 0}
         result = DigestResult(messages=[])
-        sections: list[_Section] = []
+        recap = window_hours is not None
+        since = now - (timedelta(hours=window_hours) if recap else self.lookback)
+        gate = asyncio.Semaphore(self.concurrency)
 
-        for channel in channels:
+        async def process(channel) -> _Section | None:
             info = ChannelInfo(channel.peer_id, channel.title, channel.username)
-            recap = window_hours is not None
-            since = now - (timedelta(hours=window_hours) if recap else self.lookback)
-            after_id = 0 if recap else channel.last_message_id
-            try:
-                posts = await self.reader.fetch_posts(
-                    info, after_id=after_id, since=since, limit=self.max_posts, with_images=images_left > 0
-                )
-                if not posts:
-                    continue
-                for post in posts:
-                    for image in post.images:
-                        if images_left <= 0:
-                            break
-                        post.image_descriptions.append(await self.llm.describe_image(image))
-                        images_left -= 1
-                        result.images += 1
-                    post.images.clear()
-                summary = await self.llm.summarize_channel(channel.title, posts)
-            except Exception as exc:  # one broken channel must not kill the whole digest
-                logger.warning("channel %s failed: %s", channel.title, exc)
-                result.errors.append(f"{channel.title} ({exc})")
-                continue
+            async with gate:
+                try:
+                    posts = await self.reader.fetch_posts(
+                        info,
+                        after_id=0 if recap else channel.last_message_id,
+                        since=since,
+                        limit=self.max_posts,
+                        with_images=budget["images"] > 0,
+                    )
+                    if not posts:
+                        return None
+                    for post in posts:
+                        for image in post.images:
+                            if budget["images"] <= 0:
+                                break
+                            budget["images"] -= 1  # reserve before awaiting: other channels run concurrently
+                            result.images += 1
+                            post.image_descriptions.append(await self.llm.describe_image(image))
+                        post.images.clear()
+                    summary = await self.llm.summarize_channel(channel.title, posts)
+                except Exception as exc:  # one broken channel must not kill the whole digest
+                    logger.warning("channel %s failed: %s", channel.title, exc)
+                    result.errors.append(f"{channel.title} ({exc})")
+                    return None
+            return _Section(info, posts, summary)
 
-            sections.append(_Section(info, posts, summary))
-            result.posts += len(posts)
+        # gather keeps the channel order of the list, whatever finishes first
+        sections = [s for s in await asyncio.gather(*(process(c) for c in channels)) if s]
+        for s in sections:
+            result.posts += len(s.posts)
             if not recap:
-                result.read_marks[channel.peer_id] = max(p.message_id for p in posts)
+                result.read_marks[s.channel.peer_id] = max(p.message_id for p in s.posts)
 
         result.channels_with_news = len(sections)
         highlights = ""
