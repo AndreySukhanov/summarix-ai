@@ -1,6 +1,7 @@
 """
 Parse whatever the user pastes to point at a channel:
-@name, name, t.me/name, https://t.me/s/name, t.me/name/123, t.me/+invite, t.me/joinchat/invite.
+@name, name, t.me/name, https://t.me/s/name, t.me/name/123, t.me/+invite, t.me/joinchat/invite,
+t.me/addlist/slug (a shared chat folder).
 """
 import re
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ _LINK = re.compile(r"^(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/(.+)$", re.
 
 @dataclass(frozen=True)
 class ChannelRef:
-    kind: Literal["username", "invite", "id"]
+    kind: Literal["username", "invite", "id", "folder"]
     value: str
 
 
@@ -34,6 +35,8 @@ def parse_channel_ref(raw: str) -> ChannelRef:
         parts = [p for p in path.split("/") if p]
         if not parts:
             raise RefError(f"not a channel link: {raw}")
+        if parts[0] == "addlist" and len(parts) > 1:
+            return ChannelRef("folder", parts[1])
         if parts[0].startswith("+"):
             return ChannelRef("invite", parts[0][1:])
         if parts[0] == "joinchat" and len(parts) > 1:

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from services.llm import LLM
-from services.reader import ChannelInfo, Post, ReaderError, post_link
+from services.reader import ChannelInfo, Folder, Post, ReaderError, post_link
 from services.refs import ChannelRef
 
 NOW = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
@@ -32,6 +32,9 @@ class FakeReader:
         if ref.value in self.known:
             return self.known[ref.value]
         raise ReaderError("not found")
+
+    async def resolve_folder(self, slug: str) -> Folder:
+        return Folder("Test folder", list(self.known.values()), ["Closed club"])
 
     async def fetch_posts(self, channel, *, after_id, since, limit, with_images):
         self.calls.append({"peer_id": channel.peer_id, "after_id": after_id, "since": since, "with_images": with_images})

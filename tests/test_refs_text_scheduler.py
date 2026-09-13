@@ -22,6 +22,7 @@ from utils.text import link_refs, split_message
         ("t.me/joinchat/AbCdEf123", ChannelRef("invite", "AbCdEf123")),
         ("https://t.me/c/1234567890/55", ChannelRef("id", "-1001234567890")),
         ("-1001234567890", ChannelRef("id", "-1001234567890")),
+        ("https://t.me/addlist/Xy9_AbC", ChannelRef("folder", "Xy9_AbC")),
     ],
 )
 def test_parse_channel_ref(raw, expected):

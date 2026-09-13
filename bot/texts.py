@@ -7,7 +7,7 @@ TEXTS = {
         "help": (
             "Я собираю дайджест твоих Telegram-каналов.\n\n"
             "/add &lt;ссылка или @канал&gt; - добавить (можно несколько через пробел)\n"
-            "Или просто перешли мне пост из канала.\n"
+            "Или перешли мне пост из канала, или пришли ссылку на папку t.me/addlist/…\n"
             "/remove &lt;номер или @канал&gt; - убрать\n"
             "/channels - список\n"
             "/digest - дайджест непрочитанного сейчас\n"
@@ -17,6 +17,8 @@ TEXTS = {
         ),
         "added": "Добавил: <b>{title}</b>",
         "already": "Уже в списке: <b>{title}</b>",
+        "folder_added": "Папка <b>{title}</b>: добавлено {added}, уже были {existing}",
+        "folder_skipped": "Пропустил закрытые каналы, на которые ты не подписан: {items}",
         "add_failed": "Не получилось добавить {ref}: {reason}",
         "add_usage": "Пришли ссылку или @имя канала: /add @durov",
         "removed": "Убрал: <b>{title}</b>",
@@ -45,7 +47,7 @@ TEXTS = {
         "help": (
             "I build a digest of your Telegram channels.\n\n"
             "/add &lt;link or @channel&gt; - add (several at once is fine)\n"
-            "Or just forward me a post from the channel.\n"
+            "Or forward me a post from the channel, or send a folder link t.me/addlist/…\n"
             "/remove &lt;number or @channel&gt; - remove\n"
             "/channels - list\n"
             "/digest - digest of unread posts now\n"
@@ -55,6 +57,8 @@ TEXTS = {
         ),
         "added": "Added: <b>{title}</b>",
         "already": "Already in the list: <b>{title}</b>",
+        "folder_added": "Folder <b>{title}</b>: added {added}, already had {existing}",
+        "folder_skipped": "Skipped private channels you have not joined: {items}",
         "add_failed": "Could not add {ref}: {reason}",
         "add_usage": "Send a link or @name: /add @durov",
         "removed": "Removed: <b>{title}</b>",
