@@ -82,11 +82,11 @@ class TelethonReader:
     async def resolve(self, ref: ChannelRef) -> ChannelInfo:
         from telethon import utils
         from telethon.tl.functions.messages import CheckChatInviteRequest
-        from telethon.tl.types import ChatInviteAlready, ChatInvitePeek
+        from telethon.tl.types import ChatInviteAlready
 
         if ref.kind == "invite":
             invite = await self.client(CheckChatInviteRequest(ref.value))
-            if not isinstance(invite, (ChatInviteAlready, ChatInvitePeek)):
+            if not isinstance(invite, ChatInviteAlready):  # a peek does not let us read history
                 raise ReaderError("join this channel from your account first, then add it again")
             entity = invite.chat
         elif ref.kind == "id":
