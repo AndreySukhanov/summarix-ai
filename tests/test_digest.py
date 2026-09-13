@@ -3,7 +3,8 @@ from types import SimpleNamespace
 
 import pytest_asyncio
 
-from bot.handlers import OwnerOnly, extract_refs
+from bot.handlers import extract_refs
+from bot.middlewares import OwnerOnly
 from database.db import add_channel, init_models, last_run, list_channels, make_sessionmaker
 from services.digest import DigestService
 from services.reader import ChannelInfo

@@ -33,7 +33,7 @@ class Settings(TelegramAccountSettings):
     digest_time: str = Field(default="09:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     timezone: str = "Europe/Moscow"
     digest_language: Literal["ru", "en", "es", "fr", "kk"] = "ru"  # initial value; change in /settings
-    ui_language: Literal["ru", "en"] = "ru"
+    ui_language: Literal["ru", "en", "es", "fr", "kk"] = "ru"  # initial value; change in /settings
 
     lookback_hours: int = Field(default=24, ge=1)
     max_posts_per_channel: int = Field(default=60, ge=1)

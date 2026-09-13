@@ -1,3 +1,5 @@
+import re
+
 import pytest
 import pytest_asyncio
 
@@ -30,17 +32,13 @@ async def test_settings_row_is_seeded_once_then_updated(sessions):
         assert (again.style, again.digest_time) == ("rick", "07:15")
 
 
-def test_every_style_has_both_prompt_variants_and_titles():
+def test_style_prompt_follows_digest_language_and_custom_override():
     assert len(STYLES) == 13
-    for key, style in STYLES.items():
-        assert style["prompt_ru"] and style["prompt_en"] and style["title_ru"] and style["title_en"], key
-
-
-def test_style_prompt_language_variant_and_custom_override():
     assert style_prompt("rick", "ru").startswith("Пиши как циничный гений")
-    assert style_prompt("rick", "es").startswith("Write as a cynical genius")
+    assert style_prompt("rick", "es").startswith("Escribe como un científico genio")
+    assert style_prompt("rick", "xx").startswith("Write as a cynical genius")  # unknown language -> English
     assert style_prompt("rick", "ru", custom_prompt="  только цифры  ") == "только цифры"
-    assert style_prompt("unknown", "en") == STYLES["digest"]["prompt_en"]
+    assert style_prompt("unknown", "en") == STYLES["digest"]["prompt"]["en"]
 
 
 async def test_digest_uses_style_language_and_custom_prompt_from_settings(sessions):
@@ -68,6 +66,42 @@ async def test_digest_uses_style_language_and_custom_prompt_from_settings(sessio
 @pytest.mark.parametrize("raw, expected", [("08:30", "08:30"), ("8:05", "08:05"), ("23.59", "23:59"), ("24:00", None), ("abc", None)])
 def test_parse_time(raw, expected):
     assert parse_time(raw) == expected
+
+
+def test_interface_texts_complete_in_all_languages():
+    from bot.keyboards import button_texts
+    from bot.texts import TEXTS, UI_LANGUAGES
+
+    assert UI_LANGUAGES == ("ru", "en", "es", "fr", "kk")
+    reference = set(TEXTS["en"])
+    for lang, table in TEXTS.items():
+        assert set(table) == reference, (lang, reference ^ set(table))
+        for key, text in table.items():
+            if "{" in TEXTS["en"][key]:
+                assert set(re.findall(r"{(\w+)}", text)) == set(re.findall(r"{(\w+)}", TEXTS["en"][key])), (lang, key)
+    assert len(button_texts("menu_settings")) == 5
+
+
+def test_every_style_is_translated():
+    for key, style in STYLES.items():
+        for lang in ("ru", "en", "es", "fr", "kk"):
+            assert style["title"][lang] and style["prompt"][lang], (key, lang)
+
+
+async def test_old_database_gets_ui_language_column(tmp_path):
+    url = f"sqlite+aiosqlite:///{tmp_path / 'old.db'}"
+    engine, maker = make_sessionmaker(url)
+    async with engine.begin() as conn:  # the settings table as the first release created it
+        await conn.exec_driver_sql(
+            "CREATE TABLE settings (id INTEGER PRIMARY KEY, style VARCHAR(32), language VARCHAR(8), "
+            "digest_time VARCHAR(5), timezone VARCHAR(64), custom_prompt TEXT)"
+        )
+        await conn.exec_driver_sql("INSERT INTO settings VALUES (1, 'rick', 'en', '08:00', 'UTC', NULL)")
+    await init_models(engine)
+    async with maker() as db:
+        row = await get_settings(db, DEFAULTS)
+        assert (row.style, row.ui_language) == ("rick", "ru")
+    await engine.dispose()
 
 
 def test_timezones():
