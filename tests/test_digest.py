@@ -48,7 +48,7 @@ async def test_digest_marks_read_only_after_commit(sessions):
     first = await svc.build(now=NOW)
     assert first.posts == 2 and first.read_marks == {TECH.peer_id: 11}
     assert '<a href="https://t.me/technews/10">1</a>' in first.messages[0]
-    assert "Tech &lt;News&gt;" in first.messages[0]
+    assert "➡️ <b><a href=\"https://t.me/technews\">Tech &lt;News&gt;</a></b>" in first.messages[0]
 
     again = await svc.build(now=NOW)  # nothing committed yet: same posts again
     assert again.posts == 2
