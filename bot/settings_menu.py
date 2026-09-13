@@ -1,6 +1,6 @@
 """
-/settings: style, digest language, time, timezone, custom prompt.
-Buttons for the common choices, commands for free input: /time 08:30, /tz Europe/Astrakhan, /prompt ...
+/settings: style, digest language, interface language, time, timezone, custom prompt.
+Everything is a button; free input is a command: /time 08:30, /tz Europe/Astrakhan, /prompt ...
 """
 import asyncio
 import html
@@ -12,7 +12,8 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.texts import t
+from bot.keyboards import TIME_PRESETS, button_texts, grid, main_menu
+from bot.texts import UI_LANGUAGES, t
 from database.db import SessionMaker, get_settings, update_settings
 from services.styles import LANGUAGES, STYLES, TIMEZONE_PRESETS, style_title
 
@@ -41,44 +42,39 @@ def utc_offset(tz_name: str) -> str:
     return f"UTC{sign}{hours}" + (f":{mins:02d}" if mins else "")
 
 
-def _grid(buttons: list[InlineKeyboardButton], per_row: int) -> list[list[InlineKeyboardButton]]:
-    return [buttons[i : i + per_row] for i in range(0, len(buttons), per_row)]
-
-
-def build_settings_router(*, sessions: SessionMaker, defaults: dict, lang: str, wake: asyncio.Event) -> Router:
+def build_settings_router(*, sessions: SessionMaker, defaults: dict, wake: asyncio.Event) -> Router:
     router = Router()
-    back = InlineKeyboardButton(text=t(lang, "back"), callback_data="set:main")
 
-    async def summary_text() -> str:
+    def back(lang: str) -> list[InlineKeyboardButton]:
+        return [InlineKeyboardButton(text=t(lang, "back"), callback_data="set:main")]
+
+    async def main_view(lang: str) -> tuple[str, InlineKeyboardMarkup]:
         async with sessions() as db:
             s = await get_settings(db, defaults)
-        prompt = t(lang, "custom_prompt_on") if s.custom_prompt else t(lang, "custom_prompt_off")
-        return t(
+        style = style_title(s.style, lang)
+        if s.custom_prompt:
+            style += f" ({t(lang, 'custom_prompt_on')})"
+        text = t(
             lang,
             "settings",
-            style=style_title(s.style, lang) + (f" ({prompt})" if s.custom_prompt else ""),
+            style=style,
             language=LANGUAGES.get(s.language, LANGUAGES["en"])[0],
+            ui_language=LANGUAGES.get(s.ui_language, LANGUAGES["en"])[0],
             time=s.digest_time,
             tz=f"{s.timezone} ({utc_offset(s.timezone)})",
         )
-
-    def main_keyboard() -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup(
+        b = lambda key, data: InlineKeyboardButton(text=t(lang, key), callback_data=data)  # noqa: E731
+        kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [
-                    InlineKeyboardButton(text=t(lang, "btn_style"), callback_data="set:style"),
-                    InlineKeyboardButton(text=t(lang, "btn_language"), callback_data="set:lang"),
-                ],
-                [
-                    InlineKeyboardButton(text=t(lang, "btn_time"), callback_data="set:time"),
-                    InlineKeyboardButton(text=t(lang, "btn_tz"), callback_data="set:tz"),
-                ],
-                [InlineKeyboardButton(text=t(lang, "btn_prompt"), callback_data="set:prompt")],
+                [b("btn_style", "set:style"), b("btn_prompt", "set:prompt")],
+                [b("btn_language", "set:lang"), b("btn_ui_language", "set:ui")],
+                [b("btn_time", "set:time"), b("btn_tz", "set:tz")],
             ]
         )
+        return text, kb
 
-    async def show_main(target: Message | CallbackQuery) -> None:
-        text, kb = await summary_text(), main_keyboard()
+    async def show_main(target: Message | CallbackQuery, lang: str) -> None:
+        text, kb = await main_view(lang)
         if isinstance(target, CallbackQuery):
             await target.message.edit_text(text, reply_markup=kb)
             await target.answer()
@@ -91,92 +87,123 @@ def build_settings_router(*, sessions: SessionMaker, defaults: dict, lang: str, 
         if "digest_time" in changes or "timezone" in changes:
             wake.set()  # scheduler recomputes the next run right away
 
-    @router.message(Command("settings"))
-    async def cmd_settings(message: Message) -> None:
-        await show_main(message)
-
-    @router.callback_query(F.data == "set:main")
-    async def cb_main(call: CallbackQuery) -> None:
-        await show_main(call)
-
-    @router.callback_query(F.data == "set:style")
-    async def cb_styles(call: CallbackQuery) -> None:
-        buttons = [InlineKeyboardButton(text=style_title(k, lang), callback_data=f"style:{k}") for k in STYLES]
+    async def picker(call: CallbackQuery, lang: str, title_key: str, buttons: list[InlineKeyboardButton], per_row: int):
         await call.message.edit_text(
-            t(lang, "choose_style"), reply_markup=InlineKeyboardMarkup(inline_keyboard=_grid(buttons, 2) + [[back]])
+            t(lang, title_key), reply_markup=InlineKeyboardMarkup(inline_keyboard=grid(buttons, per_row) + [back(lang)])
         )
         await call.answer()
 
+    @router.message(Command("settings"))
+    @router.message(F.text.in_(button_texts("menu_settings")))
+    async def cmd_settings(message: Message, lang: str) -> None:
+        await show_main(message, lang)
+
+    @router.callback_query(F.data == "set:main")
+    async def cb_main(call: CallbackQuery, lang: str) -> None:
+        await show_main(call, lang)
+
+    # style
+    @router.callback_query(F.data == "set:style")
+    async def cb_styles(call: CallbackQuery, lang: str) -> None:
+        buttons = [InlineKeyboardButton(text=style_title(k, lang), callback_data=f"style:{k}") for k in STYLES]
+        await picker(call, lang, "choose_style", buttons, 2)
+
     @router.callback_query(F.data.startswith("style:"))
-    async def cb_style(call: CallbackQuery) -> None:
+    async def cb_style(call: CallbackQuery, lang: str) -> None:
         key = call.data.split(":", 1)[1]
         if key in STYLES:
             await save(style=key, custom_prompt=None)
-        await show_main(call)
+        await show_main(call, lang)
 
+    # digest language
     @router.callback_query(F.data == "set:lang")
-    async def cb_languages(call: CallbackQuery) -> None:
+    async def cb_languages(call: CallbackQuery, lang: str) -> None:
         buttons = [InlineKeyboardButton(text=title, callback_data=f"lang:{code}") for code, (title, _) in LANGUAGES.items()]
-        await call.message.edit_text(
-            t(lang, "choose_language"), reply_markup=InlineKeyboardMarkup(inline_keyboard=_grid(buttons, 2) + [[back]])
-        )
-        await call.answer()
+        await picker(call, lang, "choose_language", buttons, 2)
 
     @router.callback_query(F.data.startswith("lang:"))
-    async def cb_language(call: CallbackQuery) -> None:
+    async def cb_language(call: CallbackQuery, lang: str) -> None:
         code = call.data.split(":", 1)[1]
         if code in LANGUAGES:
             await save(language=code)
-        await show_main(call)
+        await show_main(call, lang)
 
-    @router.callback_query(F.data == "set:tz")
-    async def cb_timezones(call: CallbackQuery) -> None:
-        buttons = [
-            InlineKeyboardButton(text=f"{name.split('/')[-1].replace('_', ' ')} {utc_offset(name)}", callback_data=f"tz:{name}")
-            for name in TIMEZONE_PRESETS
-        ]
-        await call.message.edit_text(
-            t(lang, "choose_tz"), reply_markup=InlineKeyboardMarkup(inline_keyboard=_grid(buttons, 2) + [[back]])
-        )
-        await call.answer()
+    # interface language
+    @router.callback_query(F.data == "set:ui")
+    async def cb_ui_languages(call: CallbackQuery, lang: str) -> None:
+        buttons = [InlineKeyboardButton(text=LANGUAGES[code][0], callback_data=f"ui:{code}") for code in UI_LANGUAGES]
+        await picker(call, lang, "choose_ui_language", buttons, 2)
 
-    @router.callback_query(F.data.startswith("tz:"))
-    async def cb_timezone(call: CallbackQuery) -> None:
-        name = call.data.split(":", 1)[1]
-        if valid_timezone(name):
-            await save(timezone=name)
-        await show_main(call)
+    @router.callback_query(F.data.startswith("ui:"))
+    async def cb_ui_language(call: CallbackQuery) -> None:
+        code = call.data.split(":", 1)[1]
+        if code not in UI_LANGUAGES:
+            code = "en"
+        await save(ui_language=code)
+        await show_main(call, code)
+        # the reply keyboard can only be replaced by sending a new message
+        await call.message.answer(t(code, "menu_settings"), reply_markup=main_menu(code))
 
+    # time
     @router.callback_query(F.data == "set:time")
-    async def cb_time(call: CallbackQuery) -> None:
-        await call.message.edit_text(t(lang, "time_hint"), reply_markup=InlineKeyboardMarkup(inline_keyboard=[[back]]))
-        await call.answer()
+    async def cb_times(call: CallbackQuery, lang: str) -> None:
+        buttons = [InlineKeyboardButton(text=v, callback_data=f"time:{v}") for v in TIME_PRESETS]
+        await picker(call, lang, "choose_time", buttons, 5)
 
-    @router.callback_query(F.data == "set:prompt")
-    async def cb_prompt(call: CallbackQuery) -> None:
-        await call.message.edit_text(t(lang, "prompt_hint"), reply_markup=InlineKeyboardMarkup(inline_keyboard=[[back]]))
-        await call.answer()
+    @router.callback_query(F.data.startswith("time:"))
+    async def cb_time(call: CallbackQuery, lang: str) -> None:
+        value = parse_time(call.data.split(":", 1)[1])
+        if value:
+            await save(digest_time=value)
+        await show_main(call, lang)
 
     @router.message(Command("time"))
-    async def cmd_time(message: Message, command: CommandObject) -> None:
+    async def cmd_time(message: Message, command: CommandObject, lang: str) -> None:
         value = parse_time(command.args or "")
         if not value:
             await message.answer(t(lang, "time_hint"))
             return
         await save(digest_time=value)
-        await show_main(message)
+        await show_main(message, lang)
+
+    # timezone
+    @router.callback_query(F.data == "set:tz")
+    async def cb_timezones(call: CallbackQuery, lang: str) -> None:
+        buttons = [
+            InlineKeyboardButton(text=f"{name.split('/')[-1].replace('_', ' ')} {utc_offset(name)}", callback_data=f"tz:{name}")
+            for name in TIMEZONE_PRESETS
+        ]
+        await picker(call, lang, "choose_tz", buttons, 2)
+
+    @router.callback_query(F.data.startswith("tz:"))
+    async def cb_timezone(call: CallbackQuery, lang: str) -> None:
+        name = call.data.split(":", 1)[1]
+        if valid_timezone(name):
+            await save(timezone=name)
+        await show_main(call, lang)
 
     @router.message(Command("tz"))
-    async def cmd_tz(message: Message, command: CommandObject) -> None:
+    async def cmd_tz(message: Message, command: CommandObject, lang: str) -> None:
         name = (command.args or "").strip()
         if not valid_timezone(name):
             await message.answer(t(lang, "tz_invalid", tz=html.escape(name)))
             return
         await save(timezone=name)
-        await show_main(message)
+        await show_main(message, lang)
+
+    # custom prompt
+    @router.callback_query(F.data == "set:prompt")
+    async def cb_prompt(call: CallbackQuery, lang: str) -> None:
+        async with sessions() as db:
+            current = (await get_settings(db, defaults)).custom_prompt
+        text = t(lang, "prompt_hint")
+        if current:
+            text += f"\n\n<i>{html.escape(current)}</i>"
+        await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[back(lang)]))
+        await call.answer()
 
     @router.message(Command("prompt"))
-    async def cmd_prompt(message: Message, command: CommandObject) -> None:
+    async def cmd_prompt(message: Message, command: CommandObject, lang: str) -> None:
         text = (command.args or "").strip()
         if not text:
             await message.answer(t(lang, "prompt_hint"))
@@ -185,6 +212,6 @@ def build_settings_router(*, sessions: SessionMaker, defaults: dict, lang: str, 
             await save(custom_prompt=None)
         else:
             await save(custom_prompt=text[:MAX_PROMPT_CHARS])
-        await show_main(message)
+        await show_main(message, lang)
 
     return router

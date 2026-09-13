@@ -1,17 +1,19 @@
 """
-Commands. Everything here runs only for the owner - see OwnerOnly.
+Commands and menu buttons. Every handler receives `lang` from the UiLanguage middleware;
+only the owner gets this far (OwnerOnly).
 """
 import html
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from typing import Any
 from zoneinfo import ZoneInfo
 
-from aiogram import BaseMiddleware, Bot, F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject
-from aiogram.types import LinkPreviewOptions, Message, MessageOriginChannel, TelegramObject
+from aiogram.types import CallbackQuery, LinkPreviewOptions, Message, MessageOriginChannel
 
+from bot.keyboards import DIGEST_WINDOWS, button_texts, channels_keyboard, digest_menu, main_menu
 from bot.texts import t
 from database.db import SessionMaker, add_channel, get_settings, last_run, list_channels, remove_channel
 from services.digest import DigestService
@@ -22,24 +24,11 @@ from services.scheduler import next_run_at
 logger = logging.getLogger(__name__)
 
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
+_REF_IN_TEXT = re.compile(r"(?:https?://)?(?:t\.me|telegram\.me)/\S+|@[A-Za-z][A-Za-z0-9_]{3,31}", re.I)
 
 
-class OwnerOnly(BaseMiddleware):
-    """Silently drops every update that does not come from the owner."""
-
-    def __init__(self, owner_id: int):
-        self.owner_id = owner_id
-
-    async def __call__(
-        self,
-        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
-        event: TelegramObject,
-        data: dict[str, Any],
-    ) -> Any:
-        user = getattr(event, "from_user", None)
-        if user is None or user.id != self.owner_id:
-            return None
-        return await handler(event, data)
+def extract_refs(text: str | None) -> list[str]:
+    return _REF_IN_TEXT.findall(text or "")
 
 
 async def send_digest(bot: Bot, chat_id: int, service: DigestService, *, window_hours: int | None, trigger: str) -> None:
@@ -51,18 +40,12 @@ async def send_digest(bot: Bot, chat_id: int, service: DigestService, *, window_
         await service.commit(result, trigger)
 
 
-def build_router(
-    *,
-    sessions: SessionMaker,
-    reader: Reader,
-    service: DigestService,
-    lang: str,
-    defaults: dict,
-    model: str,
-) -> Router:
+def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestService, defaults: dict, model: str) -> Router:
     router = Router()
 
-    async def add_ref(message: Message, ref: ChannelRef, shown: str) -> None:
+    # ---- adding channels ----
+
+    async def add_ref(message: Message, lang: str, ref: ChannelRef, shown: str) -> None:
         try:
             info = await reader.resolve(ref)
         except (ReaderError, ValueError) as exc:
@@ -71,10 +54,9 @@ def build_router(
         async with sessions() as db:
             channel, created = await add_channel(db, info.peer_id, info.title, info.username)
             await db.commit()
-        key = "added" if created else "already"
-        await message.answer(t(lang, key, title=html.escape(channel.title)))
+        await message.answer(t(lang, "added" if created else "already", title=html.escape(channel.title)))
 
-    async def add_folder(message: Message, slug: str, shown: str) -> None:
+    async def add_folder(message: Message, lang: str, slug: str, shown: str) -> None:
         try:
             folder = await reader.resolve_folder(slug)
         except (ReaderError, ValueError) as exc:
@@ -92,21 +74,7 @@ def build_router(
             lines.append(t(lang, "folder_skipped", items=html.escape(", ".join(folder.skipped))))
         await message.answer("\n".join(lines))
 
-    @router.message(Command("start", "help"))
-    async def cmd_help(message: Message) -> None:
-        async with sessions() as db:
-            prefs = await get_settings(db, defaults)
-        await message.answer(t(lang, "help", time=prefs.digest_time, tz=prefs.timezone))
-
-    @router.message(Command("add"))
-    async def cmd_add(message: Message, command: CommandObject) -> None:
-        raw = (command.args or "").split()
-        if not raw:
-            await message.answer(t(lang, "add_usage"))
-            return
-        await add_items(message, raw)
-
-    async def add_items(message: Message, raw: list[str]) -> None:
+    async def add_items(message: Message, lang: str, raw: list[str]) -> None:
         for item in raw:
             try:
                 ref = parse_channel_ref(item)
@@ -114,30 +82,73 @@ def build_router(
                 await message.answer(t(lang, "add_failed", ref=html.escape(item), reason=html.escape(str(exc))))
                 continue
             if ref.kind == "folder":
-                await add_folder(message, ref.value, item)
+                await add_folder(message, lang, ref.value, item)
             else:
-                await add_ref(message, ref, item)
+                await add_ref(message, lang, ref, item)
+
+    @router.message(Command("add"))
+    async def cmd_add(message: Message, command: CommandObject, lang: str) -> None:
+        raw = (command.args or "").split()
+        if raw:
+            await add_items(message, lang, raw)
+        else:
+            await message.answer(t(lang, "add_prompt"))
+
+    @router.message(F.text.in_(button_texts("menu_add")))
+    async def btn_add(message: Message, lang: str) -> None:
+        await message.answer(t(lang, "add_prompt"))
 
     @router.message(F.forward_origin.as_("origin"))
-    async def forwarded(message: Message, origin: Any) -> None:
+    async def forwarded(message: Message, origin: Any, lang: str) -> None:
         if isinstance(origin, MessageOriginChannel):
-            await add_ref(message, ChannelRef("id", str(origin.chat.id)), origin.chat.title or "")
+            await add_ref(message, lang, ChannelRef("id", str(origin.chat.id)), origin.chat.title or "")
 
-    @router.message(Command("channels"))
-    async def cmd_channels(message: Message) -> None:
+    # ---- help / start ----
+
+    @router.message(Command("start", "help"))
+    @router.message(F.text.in_(button_texts("menu_help")))
+    async def cmd_help(message: Message, lang: str) -> None:
+        async with sessions() as db:
+            prefs = await get_settings(db, defaults)
+        await message.answer(t(lang, "help", time=prefs.digest_time, tz=prefs.timezone), reply_markup=main_menu(lang))
+
+    # ---- channels ----
+
+    async def channels_view(lang: str, page: int) -> tuple[str, Any]:
         async with sessions() as db:
             channels = await list_channels(db)
         if not channels:
-            await message.answer(t(lang, "no_channels"))
-            return
-        lines = [t(lang, "channels_header", count=len(channels))]
-        for i, c in enumerate(channels, start=1):
-            name = html.escape(c.title)
-            lines.append(f'{i}. <a href="https://t.me/{c.username}">{name}</a>' if c.username else f"{i}. {name}")
-        await message.answer("\n".join(lines), link_preview_options=NO_PREVIEW)
+            return t(lang, "no_channels"), None
+        text = t(lang, "channels_header", count=len(channels)) + "\n" + t(lang, "channels_hint")
+        return text, channels_keyboard(channels, page)
+
+    @router.message(Command("channels"))
+    @router.message(F.text.in_(button_texts("menu_channels")))
+    async def cmd_channels(message: Message, lang: str) -> None:
+        text, kb = await channels_view(lang, 0)
+        await message.answer(text, reply_markup=kb)
+
+    @router.callback_query(F.data.startswith("ch:"))
+    async def cb_channels_page(call: CallbackQuery, lang: str) -> None:
+        text, kb = await channels_view(lang, int(call.data.split(":")[1]))
+        await call.message.edit_text(text, reply_markup=kb)
+        await call.answer()
+
+    @router.callback_query(F.data.startswith("rm:"))
+    async def cb_remove(call: CallbackQuery, lang: str) -> None:
+        _, peer_id, page = call.data.split(":")
+        async with sessions() as db:
+            channels = {c.peer_id: c for c in await list_channels(db)}
+            target = channels.get(int(peer_id))
+            if target:
+                await remove_channel(db, target.peer_id)
+                await db.commit()
+        text, kb = await channels_view(lang, int(page))
+        await call.message.edit_text(text, reply_markup=kb)
+        await call.answer(t(lang, "removed", title=target.title).replace("<b>", "").replace("</b>", "") if target else "")
 
     @router.message(Command("remove"))
-    async def cmd_remove(message: Message, command: CommandObject) -> None:
+    async def cmd_remove(message: Message, command: CommandObject, lang: str) -> None:
         arg = (command.args or "").strip()
         async with sessions() as db:
             channels = await list_channels(db)
@@ -147,8 +158,10 @@ def build_router(
             elif arg:
                 try:
                     ref = parse_channel_ref(arg)
-                    target = next((c for c in channels if ref.kind == "username" and c.username
-                                   and c.username.lower() == ref.value), None)
+                    target = next(
+                        (c for c in channels if ref.kind == "username" and c.username and c.username.lower() == ref.value),
+                        None,
+                    )
                 except RefError:
                     target = None
             if target is None:
@@ -158,22 +171,42 @@ def build_router(
             await db.commit()
         await message.answer(t(lang, "removed", title=html.escape(target.title)))
 
-    @router.message(Command("digest"))
-    async def cmd_digest(message: Message, command: CommandObject, bot: Bot) -> None:
-        arg = (command.args or "").strip()
-        window = int(arg) if arg.isdigit() and int(arg) > 0 else None
+    # ---- digest ----
+
+    async def run_digest(bot: Bot, chat_id: int, lang: str, answer, window: int | None) -> None:
         if service.lock.locked():
-            await message.answer(t(lang, "busy"))
+            await answer(t(lang, "busy"))
             return
-        await message.answer(t(lang, "collecting"))
+        await answer(t(lang, "collecting"))
         try:
-            await send_digest(bot, message.chat.id, service, window_hours=window, trigger="manual")
+            await send_digest(bot, chat_id, service, window_hours=window, trigger="manual")
         except Exception as exc:
             logger.exception("manual digest failed")
-            await message.answer(t(lang, "error", reason=html.escape(str(exc))))
+            await answer(t(lang, "error", reason=html.escape(str(exc))))
+
+    @router.message(Command("digest"))
+    async def cmd_digest(message: Message, command: CommandObject, bot: Bot, lang: str) -> None:
+        arg = (command.args or "").strip()
+        window = int(arg) if arg.isdigit() and int(arg) > 0 else None
+        await run_digest(bot, message.chat.id, lang, message.answer, window)
+
+    @router.message(F.text.in_(button_texts("menu_digest")))
+    async def btn_digest(message: Message, lang: str) -> None:
+        await message.answer(t(lang, "digest_choose"), reply_markup=digest_menu(lang))
+
+    @router.callback_query(F.data.startswith("dg:"))
+    async def cb_digest(call: CallbackQuery, bot: Bot, lang: str) -> None:
+        key = call.data.split(":", 1)[1]
+        await call.answer()
+        await call.message.edit_reply_markup(reply_markup=None)
+        if key in DIGEST_WINDOWS:
+            await run_digest(bot, call.message.chat.id, lang, call.message.answer, DIGEST_WINDOWS[key])
+
+    # ---- status ----
 
     @router.message(Command("status"))
-    async def cmd_status(message: Message) -> None:
+    @router.message(F.text.in_(button_texts("menu_status")))
+    async def cmd_status(message: Message, lang: str) -> None:
         async with sessions() as db:
             channels = await list_channels(db)
             run = await last_run(db)
@@ -185,7 +218,7 @@ def build_router(
             last = t(
                 lang,
                 "last_run",
-                when=run.started_at.strftime("%d.%m %H:%M UTC"),
+                when=run.started_at.astimezone(ZoneInfo(prefs.timezone)).strftime("%d.%m %H:%M"),
                 posts=run.posts,
                 images=run.images,
                 tokens=run.input_tokens + run.output_tokens,
@@ -201,20 +234,15 @@ def build_router(
             )
         )
 
+    # ---- anything else: links become /add ----
+
     @router.message(F.text & ~F.text.startswith("/"))
-    async def plain_links(message: Message) -> None:
+    async def plain_links(message: Message, lang: str) -> None:
         """A message with just links or @names is treated as /add - nobody remembers the command."""
         items = extract_refs(message.text)
         if items:
-            await add_items(message, items)
+            await add_items(message, lang, items)
         else:
-            await message.answer(t(lang, "add_usage"))
+            await message.answer(t(lang, "add_prompt"), reply_markup=main_menu(lang))
 
     return router
-
-
-_REF_IN_TEXT = re.compile(r"(?:https?://)?(?:t\.me|telegram\.me)/\S+|@[A-Za-z][A-Za-z0-9_]{3,31}", re.I)
-
-
-def extract_refs(text: str | None) -> list[str]:
-    return _REF_IN_TEXT.findall(text or "")

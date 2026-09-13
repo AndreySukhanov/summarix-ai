@@ -9,8 +9,12 @@ from aiogram.client.default import DefaultBotProperties
 from openai import AsyncOpenAI
 from telethon import TelegramClient
 
-from bot.handlers import OwnerOnly, build_router, send_digest
+from aiogram.types import BotCommand
+
+from bot.handlers import build_router, send_digest
+from bot.middlewares import OwnerOnly, UiLanguage
 from bot.settings_menu import build_settings_router
+from bot.texts import UI_LANGUAGES, t
 from config.settings import Settings
 from database.db import get_settings, init_models, make_sessionmaker
 from services.digest import DigestService
@@ -48,6 +52,7 @@ async def main() -> None:
     defaults = {
         "style": DEFAULT_STYLE,
         "language": settings.digest_language,
+        "ui_language": settings.ui_language,
         "digest_time": settings.digest_time,
         "timezone": settings.timezone,
     }
@@ -59,26 +64,21 @@ async def main() -> None:
         max_posts_per_channel=settings.max_posts_per_channel,
         describe_images=settings.describe_images,
         max_images_per_run=settings.max_images_per_run,
-        ui_language=settings.ui_language,
         defaults=defaults,
     )
 
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher()
-    dp.message.outer_middleware(OwnerOnly(settings.owner_id))
-    dp.callback_query.outer_middleware(OwnerOnly(settings.owner_id))
+    for observer in (dp.message, dp.callback_query):
+        observer.outer_middleware(OwnerOnly(settings.owner_id))
+        observer.outer_middleware(UiLanguage(sessions, defaults))
     wake = asyncio.Event()
-    dp.include_router(build_settings_router(sessions=sessions, defaults=defaults, lang=settings.ui_language, wake=wake))
+    # settings first: the main router ends with a catch-all for plain text
+    dp.include_router(build_settings_router(sessions=sessions, defaults=defaults, wake=wake))
     dp.include_router(
-        build_router(
-            sessions=sessions,
-            reader=reader,
-            service=service,
-            lang=settings.ui_language,
-            defaults=defaults,
-            model=settings.llm_model,
-        )
+        build_router(sessions=sessions, reader=reader, service=service, defaults=defaults, model=settings.llm_model)
     )
+    await set_commands(bot)
 
     async def scheduled() -> None:
         await send_digest(bot, settings.owner_id, service, window_hours=None, trigger="schedule")
@@ -96,6 +96,14 @@ async def main() -> None:
         scheduler.cancel()
         await client.disconnect()
         await engine.dispose()
+
+
+async def set_commands(bot: Bot) -> None:
+    """The "/" menu in Telegram, in each interface language."""
+    names = ["digest", "channels", "add", "settings", "status", "help"]
+    for lang in UI_LANGUAGES:
+        commands = [BotCommand(command=name, description=t(lang, f"cmd_{name}")) for name in names]
+        await bot.set_my_commands(commands, language_code=None if lang == "en" else lang)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,10 @@ def make_sessionmaker(url: str) -> tuple[AsyncEngine, SessionMaker]:
 async def init_models(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # create_all never alters existing tables: add columns introduced after the first release
+        columns = {row[1] for row in (await conn.exec_driver_sql("PRAGMA table_info(settings)")).fetchall()}
+        if "ui_language" not in columns:
+            await conn.exec_driver_sql("ALTER TABLE settings ADD COLUMN ui_language VARCHAR(8) NOT NULL DEFAULT 'ru'")
 
 
 async def list_channels(db: AsyncSession) -> list[Channel]:

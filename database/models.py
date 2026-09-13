@@ -35,7 +35,8 @@ class BotSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     style: Mapped[str] = mapped_column(String(32))
-    language: Mapped[str] = mapped_column(String(8))
+    language: Mapped[str] = mapped_column(String(8))  # digest language
+    ui_language: Mapped[str] = mapped_column(String(8), default="ru")  # buttons and bot messages
     digest_time: Mapped[str] = mapped_column(String(5))
     timezone: Mapped[str] = mapped_column(String(64))
     custom_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -67,6 +67,7 @@ class DigestService:
         self.defaults = defaults or {
             "style": DEFAULT_STYLE,
             "language": "ru",
+            "ui_language": ui_language,
             "digest_time": "09:00",
             "timezone": "Europe/Moscow",
         }
@@ -81,6 +82,7 @@ class DigestService:
             channels = await list_channels(db)
             prefs = await get_settings(db, self.defaults)
         self.tz = ZoneInfo(prefs.timezone)
+        self.lang = prefs.ui_language or self.lang
         self.llm.language = language_name(prefs.language)
         style = style_prompt(prefs.style, prefs.language, prefs.custom_prompt)
         if not channels:
