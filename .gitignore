@@ -16,3 +16,6 @@ venv/
 # Internal design sources
 docs/design-philosophy.md
 docs/banner.html
+
+# local Windows shortcut (absolute path)
+*.lnk
