@@ -7,7 +7,7 @@ from bot.settings_menu import parse_time, utc_offset, valid_timezone
 from database.db import add_channel, get_settings, init_models, make_sessionmaker, update_settings
 from services.digest import DigestService
 from services.reader import ChannelInfo
-from services.styles import LANGUAGES, STYLES, TIMEZONE_PRESETS, style_prompt
+from services.styles import LANGUAGES, STYLES, TIMEZONE_PRESETS, style_prompt, style_words
 from tests.fakes import NOW, FakeReader, fake_llm, make_post
 
 DEFAULTS = {"style": "digest", "language": "ru", "digest_time": "09:00", "timezone": "Europe/Moscow"}
@@ -66,6 +66,18 @@ async def test_digest_uses_style_language_and_custom_prompt_from_settings(sessio
     await svc.build(now=NOW)
     user = client.requests[-1]["messages"][-1]["content"]
     assert user.rstrip().endswith("Only numbers, like a trader.") and "TL;DR" not in user
+
+
+async def test_a_style_may_set_its_own_word_limit(sessions):
+    assert (style_words("rick"), style_words("tldr"), style_words("rick", custom_prompt="x")) == (80, None, None)
+    async with sessions() as db:
+        await add_channel(db, TECH.peer_id, TECH.title, TECH.username)
+        await db.commit()
+        await update_settings(db, DEFAULTS, style="rick")
+    llm, client = fake_llm()
+    await DigestService(sessions, FakeReader({TECH.peer_id: [make_post(TECH, 1, "news")]}), llm, defaults=DEFAULTS).build(now=NOW)
+    user = next(r for r in client.requests if "Posts from the Telegram channel" in r["messages"][-1]["content"])
+    assert "At most 80 words" in user["messages"][-1]["content"]
 
 
 @pytest.mark.parametrize("raw, expected", [("08:30", "08:30"), ("8:05", "08:05"), ("23.59", "23:59"), ("24:00", None), ("abc", None)])

@@ -16,7 +16,7 @@ from database.db import SessionMaker, get_channel, get_group, get_settings, grou
 from database.models import DigestRun, Group
 from services.llm import LLM, WORDS_PLAIN, WORDS_STYLED, Usage
 from services.reader import ChannelInfo, Post, Reader
-from services.styles import DEFAULT_STYLE, language_name, style_prompt
+from services.styles import DEFAULT_STYLE, language_name, style_prompt, style_words
 from utils.text import link_refs, one_line, split_message
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ class DigestService:
         self.llm.language = language_name(prefs.language)
         style = style_prompt(prefs.style, prefs.language, prefs.custom_prompt)
         plain = prefs.style == DEFAULT_STYLE and not prefs.custom_prompt
-        words = WORDS_PLAIN if plain else WORDS_STYLED
+        words = WORDS_PLAIN if plain else style_words(prefs.style, prefs.custom_prompt) or WORDS_STYLED
         if not channels:
             return DigestResult(messages=[t(self.lang, "no_channels")], group_id=group_id)
 
