@@ -17,7 +17,7 @@ from database.db import SessionMaker, get_settings, list_channels
 from services.llm import LLM, SEARCH_NONE
 from services.reader import ChannelInfo, Post, ReaderError
 from services.styles import language_name
-from utils.text import link_refs, split_message
+from utils.text import link_refs, one_line, split_message
 
 SEARCH_DAYS = 30
 MAX_DAYS = 365
@@ -90,14 +90,16 @@ async def search_posts(
 
     async def one(info: ChannelInfo) -> Hit | None:
         found: dict[int, Post] = {}
+        failed: Exception | None = None
         async with gate:
-            try:
-                for term in terms:
+            for term in terms:
+                try:
                     for post in await reader.search_posts(info, term, since=since, limit=per_channel):
                         found.setdefault(post.message_id, post)
-            except Exception as exc:  # one broken channel must not kill the search
-                errors.append(f"{info.title} ({exc})")
-                return None
+                except Exception as exc:  # one failing term must not cost the hits of the others
+                    failed = failed or exc
+        if failed is not None:  # listed even when other terms found something: the result is partial
+            errors.append(f"{info.title} ({one_line(failed)})")
         if not found:
             return None
         return Hit(info, sorted(found.values(), key=lambda p: p.message_id)[-per_channel:])
@@ -198,7 +200,7 @@ class SearchService:
             channels = await list_channels(db)
         if not channels:
             return [t(lang, "no_channels")]
-        self.llm.language = language_name(prefs.language)
+        language = language_name(prefs.language)
         terms = await self._terms(query)
         infos = [ChannelInfo(c.peer_id, c.title, c.username) for c in channels]
         hits, errors = await search_posts(
@@ -209,12 +211,15 @@ class SearchService:
         async def retell(hit: Hit) -> tuple[Hit, str] | None:
             async with gate:
                 try:
-                    summary = await self.llm.summarize_search(hit.channel.title, query, hit.posts)
+                    summary = await self.llm.summarize_search(hit.channel.title, query, hit.posts, language=language)
                 except Exception as exc:
-                    errors.append(f"{hit.channel.title} ({exc})")
+                    errors.append(f"{hit.channel.title} ({one_line(exc)})")
                     return None
-            # words matched in another sense: the model says so, the channel is not shown
-            return None if summary.strip().upper().startswith(SEARCH_NONE) else (hit, summary)
+            # words matched in another sense: the model says so, the channel is not shown; an empty
+            # answer is no retelling either
+            if not summary.strip() or summary.strip().upper().startswith(SEARCH_NONE):
+                return None
+            return hit, summary
 
         relevant = [r for r in await asyncio.gather(*(retell(h) for h in hits)) if r]
         shown_terms = html.escape(", ".join(terms), quote=False)

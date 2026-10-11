@@ -54,9 +54,11 @@ async def get_channel(db: AsyncSession, peer_id: int) -> Channel | None:
 
 
 async def add_channel(db: AsyncSession, peer_id: int, title: str, username: str | None) -> tuple[Channel, bool]:
-    """Returns (channel, created)."""
+    """Returns (channel, created). A known channel gets its current title and username: a renamed
+    channel would otherwise keep old links, or links to whoever took its old username."""
     existing = await get_channel(db, peer_id)
     if existing:
+        existing.title, existing.username = title, username
         return existing, False
     channel = Channel(peer_id=peer_id, title=title, username=username)
     db.add(channel)

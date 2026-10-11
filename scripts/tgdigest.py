@@ -91,7 +91,10 @@ class ChannelList:
             "excluded": self.excluded,
             "channels": [asdict(c) for c in self.channels],
         }
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        # write aside, then swap: an interrupted save must not leave a broken list behind
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
 
     def add(self, info: ChannelInfo, source: str = MANUAL) -> bool:
         if source == MANUAL and info.peer_id in self.excluded:
@@ -128,10 +131,12 @@ class ChannelList:
     def sync_folder(self, slug: str, title: str, infos: list[ChannelInfo]) -> tuple[list[str], list[str]]:
         """Bring the channels that came from this folder in line with it; manual ones stay."""
         self.folders[slug] = title
-        present = {i.peer_id for i in infos}
+        present = {i.peer_id: i for i in infos}
         for c in self.channels:
-            if c.source == MANUAL and c.peer_id in present:
-                c.source = slug  # added by hand, then put into the folder: the folder owns it now
+            if c.peer_id in present:
+                c.title, c.username = present[c.peer_id].title, present[c.peer_id].username  # renamed channels
+                if c.source == MANUAL:
+                    c.source = slug  # added by hand, then put into the folder: the folder owns it now
         gone = [c for c in self.channels if c.source == slug and c.peer_id not in present]
         for c in gone:
             self.channels.remove(c)

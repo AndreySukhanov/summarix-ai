@@ -15,6 +15,12 @@ _REF_RUN = re.compile(r"(?:\s*\[\s*\d+(?:\s*,\s*\d+)*\s*\])+")
 _NUM = re.compile(r"\d+")
 
 
+def one_line(value: object, limit: int = 300) -> str:
+    """An error message fit for one line inside an <i> element: no line breaks, not a page long."""
+    text = " ".join(str(value).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def link_refs(summary: str, posts: list[Post]) -> str:
     """Escape model text for HTML and replace [n] citations with links to the posts."""
     escaped = html.escape(summary, quote=False)
@@ -63,13 +69,61 @@ def split_message(text: str, limit: int = TELEGRAM_LIMIT) -> list[str]:
     return [c.strip("\n") for c in chunks if c.strip()]
 
 
+_TAG = re.compile(r"<(/?)([a-zA-Z]+)[^>]*>")
+
+
+def _cut_point(line: str, limit: int) -> int:
+    """The last space before the limit, stepped back out of a tag ('<a' | 'href=…') or an entity
+    ('&am' | 'p;') it would land in."""
+    cut = line.rfind(" ", 0, limit)
+    cut = cut if cut > 0 else limit
+    for opener, closer in (("<", ">"), ("&", ";")):
+        head = line[:cut]
+        pos = head.rfind(opener)
+        if 0 < pos and pos > head.rfind(closer):
+            cut = pos
+    return cut
+
+
+def _open_elements(head: str) -> list[tuple[str, int, str]]:
+    """Elements opened in `head` and not closed there: (name, start, opening tag)."""
+    stack: list[tuple[str, int, str]] = []
+    for match in _TAG.finditer(head):
+        name = match.group(2).lower()
+        if match.group(1):
+            if stack and stack[-1][0] == name:
+                stack.pop()
+        else:
+            stack.append((name, match.start(), match.group(0)))
+    return stack
+
+
+def _split_line(line: str, limit: int) -> tuple[str, str]:
+    """An over-long line -> a head of at most `limit` chars and the rest, both valid HTML for Telegram.
+    A short element the cut would split (a link, a bold title) moves whole into the rest; an element
+    longer than that (a long <i> list) is closed at the cut and opened again in the rest."""
+    margin = 0
+    while True:
+        cut = _cut_point(line, limit - margin)
+        stack = _open_elements(line[:cut])
+        if stack and stack[0][1] > 0:
+            start = stack[0][1]
+            return line[:start].rstrip(), line[start:].lstrip()
+        closers = "".join(f"</{name}>" for name, _, _ in reversed(stack))
+        if cut + len(closers) <= limit or margin:
+            reopen = "".join(tag for _, _, tag in stack)
+            head, rest = line[:cut].rstrip() + closers, reopen + line[cut:].lstrip()
+            if len(rest) >= len(line):  # a limit too small for the tags themselves: cut plainly, but move on
+                return line[:limit], line[limit:]
+            return head, rest
+        margin = len(closers)
+
+
 def _pieces(text: str, limit: int) -> list[str]:
     out: list[str] = []
     for line in text.split("\n"):
         while len(line) > limit:
-            cut = line.rfind(" ", 0, limit)
-            cut = cut if cut > 0 else limit
-            out.append(line[:cut])
-            line = line[cut:].lstrip()
+            piece, line = _split_line(line, limit)
+            out.append(piece)
         out.append(line)
     return out

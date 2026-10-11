@@ -80,24 +80,33 @@ async def send_digest(
     group_id: int | None = None,
 ) -> None:
     """One digest per group (group_id=None: every group that has channels).
-    Each is delivered and only then its posts are marked read. Groups with nothing new stay silent,
-    unless every group is silent - then one "no new posts" message."""
+    Every group is built before any is marked read: a channel in two groups then appears in both,
+    instead of the first group's commit taking its posts away from the second. Each digest is
+    delivered and only then its posts are marked read. Groups with nothing new stay silent,
+    unless every group is silent - then one "no new posts" message. One image budget for the run."""
     async with service.lock:
         async with service.sessions() as db:
             groups = [g for g, n in await list_groups(db) if n and (group_id is None or g.id == group_id)]
+        budget = service.new_budget()
+        results = [await service.build(window_hours=window_hours, group_id=g.id, budget=budget) for g in groups]
         sent: list[str] = []
         quiet: DigestResult | None = None
-        for group in groups:
-            result = await service.build(window_hours=window_hours, group_id=group.id)
+        for result in results:
             if result.channels_with_news == 0 and not result.errors and (group_id is None or len(groups) > 1):
                 quiet = quiet or result
+                if result.read_marks:  # only stickers or polls: nothing to send, but the marks move past them
+                    await service.commit(result, trigger, log=False)
                 continue
             for chunk in result.messages:
                 await bot.send_message(chat_id, chunk, link_preview_options=NO_PREVIEW)
             sent.extend(result.messages)
             await service.commit(result, trigger)
         if not sent:
-            fallback = quiet.messages if quiet else (await service.build(window_hours=window_hours)).messages
+            # no groups at all, or the asked group is gone (an old button): its own empty answer,
+            # never a digest of every channel
+            if quiet is None:
+                quiet = await service.build(window_hours=window_hours, group_id=group_id)
+            fallback = quiet.messages
             for chunk in fallback:
                 await bot.send_message(chat_id, chunk, link_preview_options=NO_PREVIEW)
             sent = fallback
@@ -253,6 +262,11 @@ def build_router(
         await call.message.edit_text(text, reply_markup=kb)
         await call.answer()
 
+    @router.callback_query(F.data == "noop")
+    async def cb_noop(call: CallbackQuery) -> None:
+        """The page number button: nothing to change, just stop the spinner."""
+        await call.answer()
+
     @router.callback_query(F.data.startswith("rmg:"))
     async def cb_remove_from_group(call: CallbackQuery, lang: str) -> None:
         _, group_id, channel_id, page = call.data.split(":")
@@ -309,12 +323,12 @@ def build_router(
             if arg:
                 try:
                     ref = parse_channel_ref(arg)
-                    target = next(
-                        (c for c in channels if ref.kind == "username" and c.username and c.username.lower() == ref.value),
-                        None,
-                    )
                 except RefError:
-                    target = None
+                    ref = None
+                if ref and ref.kind == "username":
+                    target = next((c for c in channels if (c.username or "").lower() == ref.value), None)
+                elif ref and ref.kind == "id":  # -100… id or a t.me/c/… link of a private channel
+                    target = next((c for c in channels if c.peer_id == int(ref.value)), None)
             if target is None:
                 await message.answer(t(lang, "not_found"))
                 return
@@ -477,10 +491,13 @@ def build_router(
         next_local = next_utc.astimezone(ZoneInfo(prefs.timezone))
         last = t(lang, "never")
         if run:
+            started = run.started_at
+            if started.tzinfo is None:  # SQLite hands back UTC without the zone
+                started = started.replace(tzinfo=timezone.utc)
             last = t(
                 lang,
                 "last_run",
-                when=run.started_at.astimezone(ZoneInfo(prefs.timezone)).strftime("%d.%m %H:%M"),
+                when=started.astimezone(ZoneInfo(prefs.timezone)).strftime("%d.%m %H:%M"),
                 posts=run.posts,
                 images=run.images,
                 tokens=run.input_tokens + run.output_tokens,

@@ -27,13 +27,22 @@ async def run_daily(
     job: Callable[[], Awaitable[None]],
     schedule: Callable[[], Awaitable[tuple[str, str]]],
     wake: asyncio.Event,
+    retry_s: float = 60,
 ) -> None:
     while True:
-        hhmm, tz_name = await schedule()
-        target = next_run_at(datetime.now(timezone.utc), hhmm, tz_name)
+        wake.clear()  # before reading: a change made while the settings are read stays set
+        try:
+            hhmm, tz_name = await schedule()
+            target = next_run_at(datetime.now(timezone.utc), hhmm, tz_name)
+        except Exception:  # a busy database once must not end the daily digest for good
+            logger.exception("could not read the schedule, retrying")
+            try:
+                await asyncio.wait_for(wake.wait(), timeout=retry_s)
+            except asyncio.TimeoutError:
+                pass
+            continue
         delay = max((target - datetime.now(timezone.utc)).total_seconds(), 0)
         logger.info("next digest at %s (in %.0f min)", target.isoformat(), delay / 60)
-        wake.clear()
         try:
             await asyncio.wait_for(wake.wait(), timeout=delay)
             continue  # schedule changed: recompute

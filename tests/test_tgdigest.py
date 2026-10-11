@@ -197,3 +197,14 @@ def test_manual_channel_later_put_into_the_folder_follows_the_folder():
 
     lst.sync_folder("slug", "Промт", [TECH])  # removed from the folder: gone from the digest too
     assert [c.title for c in lst.channels] == ["Tech News"]
+
+
+def test_folder_sync_picks_up_a_renamed_channel_and_saves_atomically(tmp_path):
+    lst = ChannelList()
+    lst.sync_folder("slug", "Промт", [TECH])
+    lst.sync_folder("slug", "Промт", [ChannelInfo(TECH.peer_id, "Tech News 2.0", "technews2")])
+    assert [(c.title, c.username) for c in lst.channels] == [("Tech News 2.0", "technews2")]
+
+    path = tmp_path / "channels.json"
+    lst.save(path)
+    assert ChannelList.load(path) == lst and not (tmp_path / "channels.tmp").exists()
