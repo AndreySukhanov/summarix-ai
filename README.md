@@ -88,7 +88,7 @@ Then open your bot, press Start, and add channels.
 |---|---|
 | `/add @channel https://t.me/other t.me/+invite` | Add one or several channels. Forwarding any post from a channel works too. |
 | `/channels` | Numbered list |
-| `/remove 2` or `/remove @channel` | Remove |
+| `/remove @channel` or a `t.me` link | Remove |
 | `/digest` | Digest of unread posts right now (marks them read) |
 | `/digest 48` | Recap of the last 48 hours, marks nothing |
 | `/search smart glasses 14` | What your channels wrote about a topic in the last 14 days (30 by default). The model widens the query with word forms and synonyms - Telegram search matches words only - and drops hits where a word matched in another sense |
@@ -109,7 +109,7 @@ All optional, in `.env`:
 | `DESCRIBE_IMAGES` | `true` | Caption photos, including posts that are only a picture or a chart |
 | `MAX_IMAGES_PER_RUN` | `20` | Cost cap: images beyond this are skipped |
 | `LOOKBACK_HOURS` | `24` | How far back the first digest of a newly added channel looks |
-| `MAX_POSTS_PER_CHANNEL` | `60` | Upper bound per channel per digest |
+| `MAX_POSTS_PER_CHANNEL` | `60` | Upper bound per channel per digest; a bigger backlog arrives oldest first over the next digests, nothing is skipped |
 
 ## Cost
 

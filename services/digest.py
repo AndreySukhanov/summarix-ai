@@ -17,7 +17,7 @@ from database.models import DigestRun, Group
 from services.llm import LLM, WORDS_PLAIN, WORDS_STYLED, Usage
 from services.reader import ChannelInfo, Post, Reader
 from services.styles import DEFAULT_STYLE, language_name, style_prompt
-from utils.text import link_refs, split_message
+from utils.text import link_refs, one_line, split_message
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class DigestResult:
     errors: list[str] = field(default_factory=list)
     read_marks: dict[int, int] = field(default_factory=dict)  # peer_id -> newest message id seen
     group_id: int | None = None
+    usage: Usage = field(default_factory=Usage)  # tokens of this build, logged on commit
 
 
 @dataclass
@@ -79,13 +80,23 @@ class DigestService:
         self.tz = ZoneInfo(self.defaults["timezone"])
         self.lock = asyncio.Lock()
 
+    def new_budget(self) -> dict:
+        """Image captions allowed in one run; shared by every group of the run."""
+        return {"images": self.max_images if self.describe_images else 0}
+
     async def build(
-        self, *, window_hours: int | None = None, now: datetime | None = None, group_id: int | None = None
+        self,
+        *,
+        window_hours: int | None = None,
+        now: datetime | None = None,
+        group_id: int | None = None,
+        budget: dict | None = None,
     ) -> DigestResult:
         """window_hours=None: unread posts (to be marked read). A number: a recap that marks nothing.
-        group_id: only that group's channels, with the group name under the title; None: every channel."""
+        group_id: only that group's channels, with the group name under the title; None: every channel.
+        budget: image captions left for the run (see new_budget); a fresh one when not given."""
         now = now or datetime.now(timezone.utc)
-        self.llm.usage = Usage()  # per-run token count for the run log
+        self.llm.usage = Usage()  # per-build token count, kept in the result for the run log
         async with self.sessions() as db:
             prefs = await get_settings(db, self.defaults)
             group = await get_group(db, group_id) if group_id is not None else None
@@ -100,39 +111,49 @@ class DigestService:
         if not channels:
             return DigestResult(messages=[t(self.lang, "no_channels")], group_id=group_id)
 
-        budget = {"images": self.max_images if self.describe_images else 0}
-        result = DigestResult(messages=[], group_id=group_id)
+        budget = budget if budget is not None else self.new_budget()
+        result = DigestResult(messages=[], group_id=group_id, usage=self.llm.usage)
         recap = window_hours is not None
-        since = now - (timedelta(hours=window_hours) if recap else self.lookback)
         gate = asyncio.Semaphore(self.concurrency)
+        scanned: dict[int, int] = {}  # peer_id -> last message read, posts or not
 
         async def process(index: int, channel) -> _Section | None:
             info = ChannelInfo(channel.peer_id, channel.title, channel.username)
+            unread_after = 0 if recap else channel.last_message_id
+            if recap:
+                since = now - timedelta(hours=window_hours)
+            else:  # the lookback only bounds a channel's first read; after that nothing unread is skipped
+                since = now - self.lookback if not unread_after else None
             async with gate:
                 try:
                     posts = await self.reader.fetch_posts(
-                        info,
-                        after_id=0 if recap else channel.last_message_id,
-                        since=since,
-                        limit=self.max_posts,
-                        with_images=budget["images"] > 0,
+                        info, after_id=unread_after, since=since, limit=self.max_posts, with_images=False
                     )
+                    scanned[info.peer_id] = getattr(posts, "scanned_up_to", 0)
                     if not posts:
                         return None
                     for post in posts:
-                        for image in post.images:
-                            if budget["images"] <= 0:
-                                break
-                            budget["images"] -= 1  # reserve before awaiting: other channels run concurrently
-                            result.images += 1
-                            post.image_descriptions.append(await self.llm.describe_image(image))
-                        post.images.clear()
+                        if post.photo_message_id is None or budget["images"] <= 0:
+                            continue
+                        budget["images"] -= 1  # reserve before awaiting: other channels run concurrently
+                        try:
+                            image = await self.reader.download_photo(info, post.photo_message_id)
+                            if image:
+                                post.image_descriptions.append(await self.llm.describe_image(image))
+                                result.images += 1
+                        except Exception as exc:
+                            if not post.text:  # the picture IS the post: retelling nothing would lose it
+                                raise
+                            logger.warning("image of %s failed: %s", post.link, exc)  # the text carries it
                     summary = await self.llm.summarize_channel(
                         channel.title, posts, style, words, None if plain else index
                     )
+                    if not summary.strip():  # an empty answer must not mark the posts read
+                        raise ValueError("the model returned an empty retelling")
                 except Exception as exc:  # one broken channel must not kill the whole digest
                     logger.warning("channel %s failed: %s", channel.title, exc)
-                    result.errors.append(f"{channel.title} ({exc})")
+                    result.errors.append(f"{channel.title} ({one_line(exc)})")
+                    scanned.pop(info.peer_id, None)  # nothing of a failed channel counts as read
                     return None
             return _Section(info, posts, summary)
 
@@ -141,7 +162,11 @@ class DigestService:
         for s in sections:
             result.posts += len(s.posts)
             if not recap:
-                result.read_marks[s.channel.peer_id] = max(p.message_id for p in s.posts)
+                result.read_marks[s.channel.peer_id] = max(p.read_up_to for p in s.posts)
+        if not recap:  # channels that only had stickers or polls move on too (failed ones are not in `scanned`)
+            for peer_id, last in scanned.items():
+                if last > result.read_marks.get(peer_id, 0):
+                    result.read_marks[peer_id] = last
 
         result.channels_with_news = len(sections)
         highlights = ""
@@ -154,20 +179,24 @@ class DigestService:
         result.messages = split_message(self._compose(sections, highlights, result, window_hours, now, group_title))
         return result
 
-    async def commit(self, result: DigestResult, trigger: str) -> None:
+    async def commit(self, result: DigestResult, trigger: str, log: bool = True) -> None:
+        """Move the read marks; log=False for a digest that was not sent (only stickers moved marks)."""
         async with self.sessions() as db:
             for peer_id, message_id in result.read_marks.items():
                 channel = await get_channel(db, peer_id)
                 if channel and message_id > channel.last_message_id:
                     channel.last_message_id = message_id
+            if not log:
+                await db.commit()
+                return
             db.add(
                 DigestRun(
                     trigger=trigger,
                     channels=result.channels_with_news,
                     posts=result.posts,
                     images=result.images,
-                    input_tokens=self.llm.usage.input_tokens,
-                    output_tokens=self.llm.usage.output_tokens,
+                    input_tokens=result.usage.input_tokens,
+                    output_tokens=result.usage.output_tokens,
                     errors="; ".join(result.errors) or None,
                 )
             )

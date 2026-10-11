@@ -19,7 +19,7 @@ from database.db import (
 )
 from services.digest import DigestService
 from services.reader import ChannelInfo  # noqa: E402
-from services.reader import Post, post_link
+from services.reader import Fetched, Post, post_link
 from tests.fakes import FakeReader, fake_llm
 
 
@@ -73,6 +73,14 @@ async def test_folder_group_is_reused_and_channels_can_be_in_several_groups(sess
         assert (new1, new2, dup) == (True, True, False)
         assert len(await list_channels(db)) == 1  # one channel, two memberships
         assert {g.kind: n for g, n in await list_groups(db)} == {"manual": 1, "folder": 1}
+
+
+async def test_adding_a_known_channel_takes_its_new_title_and_username(sessions):
+    async with sessions() as db:
+        await add_channel(db, AI.peer_id, AI.title, AI.username)
+        channel, created = await add_channel(db, AI.peer_id, "AI news (renamed)", "ainews2")
+        await db.commit()
+        assert not created and (channel.title, channel.username) == ("AI news (renamed)", "ainews2")
 
 
 async def test_removing_last_membership_removes_the_channel(sessions):
@@ -145,6 +153,71 @@ async def test_quiet_groups_stay_silent_and_single_group_digest(sessions):
     bot = FakeBot()
     await send_digest(bot, 1, svc, window_hours=24, trigger="manual")
     assert len(bot.sent) == 1 and "No new posts." in bot.sent[0]
+
+
+async def test_a_channel_in_two_groups_reaches_both_digests(sessions):
+    async with sessions() as db:
+        ai = await folder_group(db, "ai", "AI")
+        games = await folder_group(db, "games", "Games")
+        await add_to_group(db, ai, BOTH.peer_id, BOTH.title, BOTH.username)
+        await add_to_group(db, games, BOTH.peer_id, BOTH.title, BOTH.username)
+        await db.commit()
+    reader = FakeReader({BOTH.peer_id: [make_post(BOTH, 7, "a game made with a model")]})
+    llm, _ = fake_llm()
+    bot = FakeBot()
+
+    await send_digest(bot, 1, DigestService(sessions, reader, llm, ui_language="en"), window_hours=None, trigger="x")
+
+    assert len(bot.sent) == 2 and all("Tech and games" in text for text in bot.sent)
+    async with sessions() as db:
+        assert (await list_channels(db))[0].last_message_id == 7
+
+
+async def test_an_old_button_of_a_deleted_group_never_sends_every_channel(sessions):
+    await seed_groups(sessions)
+    reader = FakeReader({AI.peer_id: [make_post(AI, 1, "model")], GAMES.peer_id: [make_post(GAMES, 5, "patch")]})
+    llm, _ = fake_llm()
+    bot = FakeBot()
+
+    svc = DigestService(sessions, reader, llm, ui_language="en")
+    await send_digest(bot, 1, svc, window_hours=24, trigger="x", group_id=999)
+
+    assert len(bot.sent) == 1 and "AI news" not in bot.sent[0] and "Games" not in bot.sent[0]
+    async with sessions() as db:
+        assert {c.last_message_id for c in await list_channels(db)} == {0}
+
+
+async def test_a_quiet_group_still_moves_marks_past_stickers(sessions):
+    await seed_groups(sessions)
+
+    class Stickers(FakeReader):
+        async def fetch_posts(self, channel, *, after_id, since, limit, with_images=False):
+            return Fetched([], scanned_up_to=9)  # nothing but stickers everywhere
+
+    llm, _ = fake_llm()
+    bot = FakeBot()
+    svc = DigestService(sessions, Stickers(), llm, ui_language="en")
+    await send_digest(bot, 1, svc, window_hours=None, trigger="x")
+
+    assert len(bot.sent) == 1 and "No new posts." in bot.sent[0]
+    async with sessions() as db:
+        assert {c.last_message_id for c in await list_channels(db)} == {9}
+
+
+async def test_one_image_budget_for_every_group_of_a_run(sessions):
+    await seed_groups(sessions)
+
+    def photo_post(channel, message_id):
+        post = make_post(channel, message_id, "")
+        post.images, post.photo_message_id = [b"\xff\xd8jpeg"], message_id
+        return post
+
+    reader = FakeReader({AI.peer_id: [photo_post(AI, 1)], GAMES.peer_id: [photo_post(GAMES, 5)]})
+    llm, _ = fake_llm()
+    svc = DigestService(sessions, reader, llm, ui_language="en", max_images_per_run=1)
+
+    await send_digest(FakeBot(), 1, svc, window_hours=None, trigger="x")
+    assert len(reader.downloads) == 1  # not one per group
 
 
 async def test_group_channels_listing(sessions):

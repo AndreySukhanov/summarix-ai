@@ -77,7 +77,8 @@ def group_keyboard(group: Group, channels: list[Channel], page: int, lang: str) 
         nav = []
         if page > 0:
             nav.append(InlineKeyboardButton(text="◀", callback_data=f"grp:{group.id}:{page - 1}"))
-        nav.append(InlineKeyboardButton(text=f"{page + 1}/{pages}", callback_data=f"grp:{group.id}:{page}"))
+        # editing a message into itself is an error in Telegram: the current page does nothing
+        nav.append(InlineKeyboardButton(text=f"{page + 1}/{pages}", callback_data="noop"))
         if page < pages - 1:
             nav.append(InlineKeyboardButton(text="▶", callback_data=f"grp:{group.id}:{page + 1}"))
         rows.append(nav)

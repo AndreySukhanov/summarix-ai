@@ -6,7 +6,7 @@ import pytest_asyncio
 from bot.texts import TEXTS, t
 from database.db import add_channel, init_models, make_sessionmaker
 from scripts.tgdigest import Section, search_blocks
-from services.reader import ChannelInfo
+from services.reader import ChannelInfo, ReaderError
 from services.search import SearchService, find_channels, parse_query, search_posts, split_terms, topic_matcher
 from tests.fakes import NOW, FakeReader, fake_llm, make_post
 
@@ -127,7 +127,22 @@ async def test_bot_search_widens_a_phrase_and_links_citations(sessions):
     assert "Искал по словам: очки, очков, smart glasses" in text
     assert '<a href="https://t.me/technews">Tech News</a>' in text
     assert '<a href="https://t.me/technews/1">1</a>' in text and '<a href="https://t.me/technews/2">2</a>' in text
-    assert llm.language == "Russian"
+    summary_prompt = next(r for r in client.requests if r["messages"][0]["role"] == "system")
+    assert "Write in Russian only" in summary_prompt["messages"][-1]["content"]
+    assert llm.language == "English"  # passed per call: a search running alongside keeps its own language
+
+
+async def test_a_failing_term_keeps_what_the_other_terms_found():
+    class Flaky(FakeReader):
+        async def search_posts(self, channel, query, *, since, limit):
+            if query == "очков":
+                raise ReaderError("flood")
+            return await super().search_posts(channel, query, since=since, limit=limit)
+
+    reader = Flaky({TECH.peer_id: [make_post(TECH, 1, "Rokid показали очки")]})
+    hits, errors = await search_posts(reader, [TECH], ["Rokid", "очков"], since=NOW - timedelta(days=30))
+    assert [p.message_id for p in hits[0].posts] == [1]
+    assert errors == ["Tech News (flood)"]
 
 
 async def test_bot_search_hides_channels_where_the_words_matched_in_another_sense(sessions):

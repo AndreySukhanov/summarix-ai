@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -5,7 +6,7 @@ import pytest
 
 from services.reader import ChannelInfo, group_messages, post_link
 from services.refs import ChannelRef, RefError, parse_channel_ref
-from services.scheduler import next_run_at
+from services.scheduler import next_run_at, run_daily
 from tests.fakes import NOW, make_post
 from utils.text import link_refs, split_message
 
@@ -81,6 +82,52 @@ def test_split_message_respects_limit_and_keeps_lines_whole():
     assert all(len(c) <= 500 for c in chunks)
     assert "\n".join(chunks).split("\n") == lines
     assert split_message("x" * 1200, limit=500) == ["x" * 500, "x" * 500, "x" * 200]
+
+
+def test_split_never_cuts_inside_a_tag_or_an_open_element():
+    link = '<a href="https://t.me/news/1">1</a>'
+    line = "word " * 95 + "end " + link + " " + "<b>a long bold title here</b> tail"
+    for limit in range(480, 540, 3):  # cut points that would land inside the link or the bold title
+        chunks = split_message(line, limit=limit)
+        for chunk in chunks:
+            assert len(chunk) <= limit
+            assert chunk.count("<a ") == chunk.count("</a>") and chunk.count("<b>") == chunk.count("</b>")
+            assert not chunk.endswith("<a") and not chunk.startswith("href")
+        assert " ".join(chunks).split() == line.split()  # nothing lost
+
+
+def test_split_closes_and_reopens_an_element_longer_than_the_limit_and_keeps_entities_whole():
+    failures = ", ".join(f"Channel {i} (Request was unsuccessful)" for i in range(120))
+    long_italic = f"<i>Could not read: {failures}</i>"
+    chunks = split_message(long_italic, limit=1000)
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert len(chunk) <= 1000
+        assert chunk.startswith("<i>") and chunk.endswith("</i>")  # every part is a whole <i> element
+    assert "".join(c[3:-4] for c in chunks).replace(" ", "") == long_italic[3:-4].replace(" ", "")
+
+    entity = split_message("x" * 4094 + "&amp;tail", limit=4096)
+    assert entity == ["x" * 4094, "&amp;tail"]
+
+    assert "".join(split_message("<b>x</b>", limit=7)) == "<b>x</b>"  # a limit smaller than the tags: still ends
+
+
+async def test_scheduler_survives_a_failing_settings_read():
+    calls = []
+
+    async def schedule():
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+        return "09:00", "UTC"
+
+    async def job():
+        raise AssertionError("not due yet")
+
+    task = asyncio.create_task(run_daily(job, schedule, asyncio.Event(), retry_s=0.01))
+    await asyncio.sleep(0.1)
+    assert len(calls) == 2 and not task.done()  # retried, and still waiting for 09:00
+    task.cancel()
 
 
 def test_next_run_at_today_and_tomorrow_in_local_time():

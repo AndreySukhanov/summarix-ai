@@ -178,8 +178,13 @@ class LLM:
         )
         return strip_disclaimer(text)
 
-    async def summarize_search(self, title: str, query: str, posts: list[Post], words: int = WORDS_PLAIN) -> str:
-        user = self._posts_block(title, posts) + SEARCH_TASK.format(query=query, language=self.language, words=words)
+    async def summarize_search(
+        self, title: str, query: str, posts: list[Post], words: int = WORDS_PLAIN, language: str | None = None
+    ) -> str:
+        """`language` per call: two searches running at once may want different languages."""
+        user = self._posts_block(title, posts) + SEARCH_TASK.format(
+            query=query, language=language or self.language, words=words
+        )
         text = await self._chat(
             self.model,
             [

@@ -19,6 +19,9 @@ MAX_POST_CHARS = 4000
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_IMAGES_PER_POST = 2
 MAX_LINKS_PER_POST = 10
+FLOOD_RETRIES = 2
+MAX_FLOOD_WAIT_S = 60
+ALBUM_MAX = 10  # Telegram allows at most 10 media in an album
 
 
 @dataclass
@@ -38,6 +41,20 @@ class Post:
     image_descriptions: list[str] = field(default_factory=list)
     photo_message_id: int | None = None  # first message of the post with a photo, for a later download
     links: list[tuple[str, str]] = field(default_factory=list)  # (anchor text, url) hidden behind words
+    last_id: int | None = None  # highest message id of an album: the read mark must pass all of it
+
+    @property
+    def read_up_to(self) -> int:
+        return self.last_id or self.message_id
+
+
+class Fetched(list):
+    """Posts, plus how far the read went. Stickers, polls and files without text are not posts,
+    but the read mark must pass them too, or a run of them right after the mark blocks the channel."""
+
+    def __init__(self, posts: Iterable[Post] = (), scanned_up_to: int = 0):
+        super().__init__(posts)
+        self.scanned_up_to = scanned_up_to
 
 
 @dataclass
@@ -57,8 +74,10 @@ class Reader(Protocol):
     async def resolve_folder(self, slug: str) -> Folder: ...
 
     async def fetch_posts(
-        self, channel: ChannelInfo, *, after_id: int, since: datetime, limit: int, with_images: bool
+        self, channel: ChannelInfo, *, after_id: int, since: datetime | None, limit: int, with_images: bool = False
     ) -> list[Post]: ...
+
+    async def download_photo(self, channel: ChannelInfo, message_id: int) -> bytes | None: ...
 
 
 def post_link(channel: ChannelInfo, message_id: int) -> str:
@@ -222,24 +241,37 @@ class TelethonReader:
         return str(title or "")
 
     async def fetch_posts(
-        self, channel: ChannelInfo, *, after_id: int, since: datetime, limit: int, with_images: bool
-    ) -> list[Post]:
-        from telethon import errors
-
+        self,
+        channel: ChannelInfo,
+        *,
+        after_id: int,
+        since: datetime | None,
+        limit: int,
+        with_images: bool = False,
+    ) -> "Fetched":
+        """after_id > 0 (unread): the OLDEST `limit` messages after the read mark, whatever their age
+        (`since` is ignored), so a backlog bigger than the limit is delivered over several runs instead
+        of being skipped.
+        after_id == 0 (first read, recap): the newest `limit` messages not older than `since`.
+        An album cut by the limit is read to its end either way: the limit may grow by up to one album,
+        and a post never arrives in pieces or without its caption."""
         entity = await self._entity_for(channel)
-        raw = []
-        try:
-            async for message in self.client.iter_messages(entity, limit=limit, min_id=after_id):
-                if message.date < since:
-                    break
-                raw.append(message)
-        except errors.FloodWaitError as exc:
-            if exc.seconds > 60:
-                raise ReaderError(f"Telegram asks to wait {exc.seconds}s") from exc
-            await asyncio.sleep(exc.seconds)
-            return await self.fetch_posts(
-                channel, after_id=after_id, since=since, limit=limit, with_images=with_images
+        if after_id:
+            raw = await self._collect(
+                lambda: self.client.iter_messages(entity, limit=limit, min_id=after_id, reverse=True)
             )
+            if len(raw) >= limit and getattr(raw[-1], "grouped_id", None) is not None:
+                edge = raw[-1]
+                raw += await self._album_rest(
+                    edge, lambda: self.client.iter_messages(entity, limit=ALBUM_MAX, min_id=edge.id, reverse=True)
+                )
+        else:
+            raw = await self._collect(lambda: self.client.iter_messages(entity, limit=limit), stop_before=since)
+            if len(raw) >= limit and getattr(raw[-1], "grouped_id", None) is not None:
+                edge = raw[-1]  # the oldest: the album's beginning, with the caption, is further back
+                raw += await self._album_rest(
+                    edge, lambda: self.client.iter_messages(entity, limit=ALBUM_MAX, offset_id=edge.id)
+                )
 
         posts = []
         for group in group_messages(raw):
@@ -264,27 +296,45 @@ class TelethonReader:
                     images,
                     photo_message_id=photo.id if photo else None,
                     links=hidden_links(group, channel),
+                    last_id=max(m.id for m in group),
                 )
             )
-        return posts
+        return Fetched(posts, max((m.id for m in raw), default=0))
+
+    async def _album_rest(self, edge: Any, make_iter: Any) -> list[Any]:
+        """The messages right after `edge` (in the read direction) that belong to its album."""
+        rest = []
+        for message in await self._collect(make_iter):
+            if getattr(message, "grouped_id", None) != edge.grouped_id:
+                break
+            rest.append(message)
+        return rest
+
+    async def _collect(self, make_iter: Any, stop_before: datetime | None = None) -> list[Any]:
+        """Messages of one iter_messages call, stopping at the first older than `stop_before`.
+        A short FloodWait is waited out and the call retried a few times; a long or repeated one
+        becomes ReaderError, so one channel cannot hold the whole digest forever."""
+        from telethon import errors
+
+        for attempt in range(FLOOD_RETRIES + 1):
+            raw = []
+            try:
+                async for message in make_iter():
+                    if stop_before is not None and message.date < stop_before:
+                        break
+                    raw.append(message)
+                return raw
+            except errors.FloodWaitError as exc:
+                if exc.seconds > MAX_FLOOD_WAIT_S or attempt == FLOOD_RETRIES:
+                    raise ReaderError(f"Telegram asks to wait {exc.seconds}s") from exc
+                await asyncio.sleep(exc.seconds)
+        return []
 
     async def search_posts(self, channel: ChannelInfo, query: str, *, since: datetime, limit: int) -> list[Post]:
         """Posts of one channel that Telegram's own search matches for `query`, not older than `since`.
         Text posts only: a search hit without text has nothing to retell."""
-        from telethon import errors
-
         entity = await self._entity_for(channel)
-        raw = []
-        try:
-            async for message in self.client.iter_messages(entity, search=query, limit=limit):
-                if message.date < since:
-                    break
-                raw.append(message)
-        except errors.FloodWaitError as exc:
-            if exc.seconds > 60:
-                raise ReaderError(f"Telegram asks to wait {exc.seconds}s") from exc
-            await asyncio.sleep(exc.seconds)
-            return await self.search_posts(channel, query, since=since, limit=limit)
+        raw = await self._collect(lambda: self.client.iter_messages(entity, search=query, limit=limit), since)
 
         posts = []
         for group in group_messages(raw):
@@ -298,6 +348,7 @@ class TelethonReader:
                         text[:MAX_POST_CHARS],
                         post_link(channel, first.id),
                         links=hidden_links(group, channel),
+                        last_id=max(m.id for m in group),
                     )
                 )
         return posts
@@ -330,16 +381,21 @@ class TelethonReader:
         return data if data and len(data) <= MAX_IMAGE_BYTES else None
 
     async def _entity_for(self, channel: ChannelInfo) -> Any:
-        """Cheapest lookup first. Resolving @usernames is rate-limited by Telegram (flood waits
-        after a few dozen in a row), so it is the last resort, and each result is kept for the process."""
+        """Cheapest lookup first. Reading history needs only the input peer, which Telethon keeps in
+        the session file: no request (get_entity would fetch the full channel every time). Resolving
+        @usernames is rate-limited by Telegram (flood waits after a few dozen in a row), so it is the
+        last resort; each result is kept for the process."""
+        from telethon import utils
+
         if channel.peer_id in self._entities:
             return self._entities[channel.peer_id]
-        entity = None
         try:
-            entity = await self.client.get_entity(channel.peer_id)  # Telethon's session cache, no request
+            entity = await self.client.get_input_entity(channel.peer_id)
         except ValueError:
             if channel.username:
-                entity = await self.client.get_entity(channel.username)  # not subscribed: resolve once
+                entity = await self.client.get_input_entity(channel.username)  # not subscribed: resolve once
+                if utils.get_peer_id(entity) != channel.peer_id:  # the name now belongs to someone else
+                    raise ReaderError(f"@{channel.username} is now a different channel")
             else:
                 entity = await self._entity_by_id(channel.peer_id)
         self._entities[channel.peer_id] = entity
