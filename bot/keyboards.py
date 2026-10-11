@@ -102,6 +102,18 @@ def delete_confirm_keyboard(group: Group, lang: str) -> InlineKeyboardMarkup:
     )
 
 
+# ---- search ----
+
+
+def found_keyboard(found: list) -> InlineKeyboardMarkup:
+    """➕ per channel found by /find; the username travels in the callback (at most 32 chars, fits 64)."""
+    buttons = [
+        InlineKeyboardButton(text=f"➕ {i}. {_short(f.channel.title, 24)}", callback_data=f"fadd:{f.channel.username}")
+        for i, f in enumerate(found, start=1)
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=grid(buttons, 2))
+
+
 # ---- digest ----
 
 

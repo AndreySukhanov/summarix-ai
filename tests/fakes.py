@@ -27,13 +27,14 @@ class FakeReader:
         self.known = known or {}
         self.failing: set[int] = set()
         self.calls: list[dict] = []
+        self.directory: list[tuple[ChannelInfo, int | None]] = []  # what a channel search can find
 
     async def resolve(self, ref: ChannelRef) -> ChannelInfo:
         if ref.value in self.known:
             return self.known[ref.value]
         raise ReaderError("not found")
 
-    async def resolve_folder(self, slug: str) -> Folder:
+    async def resolve_folder(self, slug: str, *, own: bool = False) -> Folder:
         return Folder("Test folder", list(self.known.values()), ["Closed club"])
 
     async def fetch_posts(self, channel, *, after_id, since, limit, with_images):
@@ -45,6 +46,17 @@ class FakeReader:
         for p in selected[:limit]:
             out.append(Post(p.message_id, p.date, p.text, p.link, list(p.images) if with_images else []))
         return out
+
+    async def search_posts(self, channel, query, *, since, limit):
+        """Like Telegram: plain substring match, newest first."""
+        self.calls.append({"peer_id": channel.peer_id, "query": query, "since": since})
+        if channel.peer_id in self.failing:
+            raise ReaderError("channel is private now")
+        hits = [p for p in self.posts.get(channel.peer_id, []) if query.lower() in p.text.lower() and p.date >= since]
+        return sorted(hits, key=lambda p: p.message_id, reverse=True)[:limit]
+
+    async def search_channels(self, query, limit=20):
+        return [(info, subs) for info, subs in self.directory if query.lower() in info.title.lower()][:limit]
 
 
 class _Completions:

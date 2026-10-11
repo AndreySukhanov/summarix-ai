@@ -21,6 +21,7 @@ from services.digest import DigestService
 from services.llm import LLM
 from services.reader import TelethonReader
 from services.scheduler import run_daily
+from services.search import SearchService
 from services.styles import DEFAULT_STYLE
 
 logger = logging.getLogger("summarix")
@@ -75,8 +76,18 @@ async def main() -> None:
     wake = asyncio.Event()
     # settings first: the main router ends with a catch-all for plain text
     dp.include_router(build_settings_router(sessions=sessions, defaults=defaults, wake=wake))
+    # its own LLM wrapper: a search must not reset the token count of a digest running at the same time
+    search_llm = LLM(llm.client, settings.llm_model, vision_model=settings.vision_model)
+    searcher = SearchService(sessions, reader, search_llm, defaults=defaults)
     dp.include_router(
-        build_router(sessions=sessions, reader=reader, service=service, defaults=defaults, model=settings.llm_model)
+        build_router(
+            sessions=sessions,
+            reader=reader,
+            service=service,
+            searcher=searcher,
+            defaults=defaults,
+            model=settings.llm_model,
+        )
     )
     await set_commands(bot)
 
@@ -100,7 +111,7 @@ async def main() -> None:
 
 async def set_commands(bot: Bot) -> None:
     """The "/" menu in Telegram, in each interface language."""
-    names = ["start", "digest", "channels", "add", "settings", "status", "help"]
+    names = ["start", "digest", "search", "find", "channels", "add", "settings", "status", "help"]
     for lang in UI_LANGUAGES:
         commands = [BotCommand(command=name, description=t(lang, f"cmd_{name}")) for name in names]
         await bot.set_my_commands(commands, language_code=None if lang == "en" else lang)
