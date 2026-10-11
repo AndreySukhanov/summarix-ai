@@ -91,6 +91,8 @@ Then open your bot, press Start, and add channels.
 | `/remove 2` or `/remove @channel` | Remove |
 | `/digest` | Digest of unread posts right now (marks them read) |
 | `/digest 48` | Recap of the last 48 hours, marks nothing |
+| `/search smart glasses 14` | What your channels wrote about a topic in the last 14 days (30 by default). The model widens the query with word forms and synonyms - Telegram search matches words only - and drops hits where a word matched in another sense |
+| `/find smart glasses` | New public channels on a topic: only live ones that actually write about it, with subscribers, posts a month and share of posts on the topic; ➕ adds one |
 | `/status` | Model, next scheduled digest, last run with post/image/token counts |
 
 ## Configuration

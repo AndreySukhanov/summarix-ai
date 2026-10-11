@@ -70,10 +70,47 @@ _DISCLAIMER = re.compile(
 )
 
 
+_LIST_MARK = re.compile(r"^\s*(?:\d+[.)]|[-•*])\s*")  # "1. ", "- ", "• " the model may still add
+
+
 def strip_disclaimer(text: str) -> str:
     stripped = _DISCLAIMER.sub("", text, count=1)
     return stripped if stripped.strip() else text
 
+
+SEARCH_SYSTEM = "You are a precise research assistant. You report what Telegram channels wrote about a topic."
+
+SEARCH_TASK = """
+
+These posts matched the search «{query}». Tell the reader what this channel wrote about it.
+
+Format:
+- Write in {language} only. Plain text, no Markdown.
+- 1 to 4 points, each starts with "• " and is one or two sentences, most important first. At most {words} words in total.
+- Facts only from the posts. A post that touches the topic only in passing gets a short mention at most. Skip ads and cross-promotion.
+- After a key fact, put the source post number in square brackets, e.g. [2]. Never write links.
+- Search matches words, not meaning: a word can match in another sense («очки» are also points in a game). If no post is really about «{query}», answer with the single word NONE."""
+
+SEARCH_NONE = "NONE"
+
+# Telegram search matches whole words: "очки" does not find "очков", "AR-очки" or "smart glasses".
+SEARCH_TERMS_TASK = """Telegram search matches whole words and knows nothing of word forms or synonyms.
+For the request below, give up to 5 search terms that together find what it is about.
+A phrase finds only posts that have every word of it, so the list MUST include the single most telling word of the request on its own (the thing itself, not an adjective). Then other word forms, close synonyms, the English or brand name if there is one. One to three words each.
+Example for «электромобили Tesla»: электромобиль, электромобилей, Tesla, EV
+Answer with the terms only, one per line, no numbering, no explanations.
+
+Request: {query}"""
+
+PICK_CHANNELS_TASK = """The reader wants Telegram channels about: {query}
+
+These channels were found by a word in their name; each comes with the start of a recent post.
+Keep the channels that are really about this topic: its news, reviews, products, development, industry.
+Drop channels about a different thing that merely shares a word with the request, and spam.
+
+{channels}
+
+Answer with the numbers of the channels to keep, comma-separated, or "none". Nothing else."""
 
 IMAGE_PROMPT = """Describe this image from a Telegram channel post in one or two sentences, in {language}.
 If it contains text, a chart or a screenshot, give the key text or numbers. If it is a decorative picture, say so in three words."""
@@ -108,9 +145,8 @@ class LLM:
             ],
         )
 
-    async def summarize_channel(
-        self, title: str, posts: list[Post], style: str, words: int = WORDS_PLAIN, index: int | None = None
-    ) -> str:
+    @staticmethod
+    def _posts_block(title: str, posts: list[Post]) -> str:
         blocks = []
         for i, post in enumerate(posts, start=1):
             lines = [f"[{i}] {post.date:%Y-%m-%d %H:%M}"]
@@ -119,9 +155,13 @@ class LLM:
                 lines.append(text)
             lines += [f"(image: {d})" for d in post.image_descriptions]
             blocks.append("\n".join(lines))
+        return f"Posts from the Telegram channel \"{title}\" ({len(posts)}):\n\n" + "\n\n".join(blocks)
+
+    async def summarize_channel(
+        self, title: str, posts: list[Post], style: str, words: int = WORDS_PLAIN, index: int | None = None
+    ) -> str:
         user = (
-            f"Posts from the Telegram channel \"{title}\" ({len(posts)}):\n\n"
-            + "\n\n".join(blocks)
+            self._posts_block(title, posts)
             + SUMMARY_TASK.format(
                 language=self.language,
                 style=style,
@@ -137,6 +177,42 @@ class LLM:
             ],
         )
         return strip_disclaimer(text)
+
+    async def summarize_search(self, title: str, query: str, posts: list[Post], words: int = WORDS_PLAIN) -> str:
+        user = self._posts_block(title, posts) + SEARCH_TASK.format(query=query, language=self.language, words=words)
+        text = await self._chat(
+            self.model,
+            [
+                {"role": "system", "content": SEARCH_SYSTEM},
+                {"role": "user", "content": user},
+            ],
+        )
+        return strip_disclaimer(text)
+
+    async def search_terms(self, query: str) -> list[str]:
+        """The query plus its word forms and synonyms, for Telegram's word-only search.
+        The query alone if the model fails: a search should not die on an extra nicety."""
+        try:
+            text = await self._chat(self.model, [{"role": "user", "content": SEARCH_TERMS_TASK.format(query=query)}])
+        except Exception:
+            return [query]
+        terms = [_LIST_MARK.sub("", line).strip(" \t\"'«»") for line in text.splitlines()]
+        return list(dict.fromkeys([query, *(term for term in terms if term and len(term) <= 40)]))[:6]
+
+    async def pick_channels(self, query: str, channels: list[tuple[str, str]]) -> set[int]:
+        """Indexes of (title, sample) pairs that are really about `query`. Every index if the model
+        fails: an unfiltered list beats an empty answer."""
+        if not channels:
+            return set()
+        listing = "\n".join(f"{i}. {title} - {sample}" for i, (title, sample) in enumerate(channels, start=1))
+        try:
+            text = await self._chat(
+                self.model,
+                [{"role": "user", "content": PICK_CHANNELS_TASK.format(query=query, channels=listing)}],
+            )
+        except Exception:
+            return set(range(len(channels)))
+        return {int(n) - 1 for n in re.findall(r"\d+", text) if 1 <= int(n) <= len(channels)}
 
     async def highlights(self, sections: list[tuple[str, str]], style: str) -> str:
         user = "\n\n".join(f"## {title}\n{summary}" for title, summary in sections)

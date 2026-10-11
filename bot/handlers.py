@@ -27,6 +27,7 @@ from bot.keyboards import (
     delete_confirm_keyboard,
     digest_menu,
     digest_period_menu,
+    found_keyboard,
     group_keyboard,
     group_title,
     groups_keyboard,
@@ -54,6 +55,7 @@ from services.digest import DigestResult, DigestService
 from services.reader import Reader, ReaderError
 from services.refs import ChannelRef, RefError, parse_channel_ref
 from services.scheduler import next_run_at
+from services.search import SearchService, parse_query
 from services.styles import STYLES, style_title
 
 logger = logging.getLogger(__name__)
@@ -111,7 +113,15 @@ def _save_last_digest(messages: list[str]) -> None:
         logger.warning("could not save the last digest")
 
 
-def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestService, defaults: dict, model: str) -> Router:
+def build_router(
+    *,
+    sessions: SessionMaker,
+    reader: Reader,
+    service: DigestService,
+    searcher: SearchService,
+    defaults: dict,
+    model: str,
+) -> Router:
     router = Router()
     # "➕ Add here" in a group: the next links go to that group for a while
     pending: dict[str, float | int] = {}
@@ -412,6 +422,47 @@ def build_router(*, sessions: SessionMaker, reader: Reader, service: DigestServi
         await run_digest(
             bot, call.message.chat.id, lang, call.message.answer, DIGEST_WINDOWS[key], int(group_id) or None
         )
+
+    # ---- search ----
+
+    @router.message(Command("search"))
+    async def cmd_search(message: Message, command: CommandObject, lang: str) -> None:
+        query, days = parse_query(command.args)
+        if not query:
+            await message.answer(t(lang, "search_prompt"))
+            return
+        await message.answer(t(lang, "searching"))
+        try:
+            chunks = await searcher.search(query, days, lang)
+        except Exception as exc:
+            logger.exception("search failed")
+            await message.answer(t(lang, "error", reason=html.escape(str(exc))))
+            return
+        for chunk in chunks:
+            await message.answer(chunk, link_preview_options=NO_PREVIEW)
+
+    @router.message(Command("find"))
+    async def cmd_find(message: Message, command: CommandObject, lang: str) -> None:
+        query = (command.args or "").strip()
+        if not query:
+            await message.answer(t(lang, "find_prompt"))
+            return
+        await message.answer(t(lang, "finding"))
+        try:
+            text, found = await searcher.find(query, lang)
+        except Exception as exc:
+            logger.exception("channel search failed")
+            await message.answer(t(lang, "error", reason=html.escape(str(exc))))
+            return
+        await message.answer(
+            text, reply_markup=found_keyboard(found) if found else None, link_preview_options=NO_PREVIEW
+        )
+
+    @router.callback_query(F.data.startswith("fadd:"))
+    async def cb_find_add(call: CallbackQuery, lang: str) -> None:
+        username = call.data.split(":", 1)[1]
+        await call.answer()
+        await add_ref(call.message, lang, ChannelRef("username", username.lower()), f"@{username}")
 
     # ---- status ----
 

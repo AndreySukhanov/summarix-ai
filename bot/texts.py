@@ -582,8 +582,126 @@ _GROUPS = {
         "cmd_start": "ботты іске қосып, мәзірді көрсету",
     },
 }
+_SEARCH = {
+    "ru": {
+        "help_search": (
+            "/search &lt;тема&gt; [дни] - найти посты в твоих каналах, по умолчанию за 30 дней\n"
+            "/find &lt;тема&gt; - найти новые живые каналы по теме"
+        ),
+        "cmd_search": "поиск по твоим каналам",
+        "cmd_find": "найти новые каналы по теме",
+        "search_prompt": (
+            "Что искать? Например: <code>/search Rokid</code> или "
+            "<code>/search умные очки, smart glasses 14</code> - число в конце это дни (по умолчанию 30)."
+        ),
+        "searching": "Ищу по каналам…",
+        "search_title": "🔎 <b>«{query}»</b> за {days} дн. · каналов: {channels} · постов: {posts}",
+        "search_terms": "Искал по словам: {terms}",
+        "search_nothing": "По «{query}» за {days} дн. ничего не нашёл. Искал по словам: {terms}",
+        "find_prompt": "Каналы на какую тему найти? Например: <code>/find умные очки</code>",
+        "finding": "Ищу каналы и проверяю, живые ли они… это может занять минуту.",
+        "find_title": "🔭 Живые каналы про «{query}»:",
+        "find_stats": "   👥 {subscribers} · постов за месяц: {month} · по теме {on_topic} из {sampled}",
+        "find_nothing": "Живых каналов про «{query}» не нашёл. Искал по словам: {terms}",
+        "find_hint": "Нажми ➕, чтобы добавить канал в бота. Подписываться не нужно.",
+    },
+    "en": {
+        "help_search": (
+            "/search &lt;topic&gt; [days] - find posts in your channels, 30 days by default\n"
+            "/find &lt;topic&gt; - find new live channels on a topic"
+        ),
+        "cmd_search": "search your channels",
+        "cmd_find": "find new channels on a topic",
+        "search_prompt": (
+            "What should I look for? For example: <code>/search Rokid</code> or "
+            "<code>/search smart glasses, AR glasses 14</code> - a number at the end is days (30 by default)."
+        ),
+        "searching": "Searching your channels…",
+        "search_title": "🔎 <b>«{query}»</b> · {days} days · channels: {channels} · posts: {posts}",
+        "search_terms": "Searched for: {terms}",
+        "search_nothing": "Nothing on «{query}» in {days} days. Searched for: {terms}",
+        "find_prompt": "Channels on what topic? For example: <code>/find smart glasses</code>",
+        "finding": "Looking for channels and checking they are alive… this can take a minute.",
+        "find_title": "🔭 Live channels about «{query}»:",
+        "find_stats": "   👥 {subscribers} · posts this month: {month} · on topic {on_topic} of {sampled}",
+        "find_nothing": "No live channels about «{query}». Searched for: {terms}",
+        "find_hint": "Tap ➕ to add a channel to the bot. No need to subscribe.",
+    },
+    "es": {
+        "help_search": (
+            "/search &lt;tema&gt; [días] - buscar publicaciones en tus canales, 30 días por defecto\n"
+            "/find &lt;tema&gt; - encontrar canales nuevos y activos sobre un tema"
+        ),
+        "cmd_search": "buscar en tus canales",
+        "cmd_find": "encontrar canales nuevos",
+        "search_prompt": (
+            "¿Qué busco? Por ejemplo: <code>/search Rokid</code> o "
+            "<code>/search gafas inteligentes, smart glasses 14</code> - el número final son los días (30 por defecto)."
+        ),
+        "searching": "Buscando en tus canales…",
+        "search_title": "🔎 <b>«{query}»</b> · {days} días · canales: {channels} · publicaciones: {posts}",
+        "search_terms": "Busqué: {terms}",
+        "search_nothing": "Nada sobre «{query}» en {days} días. Busqué: {terms}",
+        "find_prompt": "¿Canales sobre qué tema? Por ejemplo: <code>/find gafas inteligentes</code>",
+        "finding": "Busco canales y compruebo que estén activos… puede tardar un minuto.",
+        "find_title": "🔭 Canales activos sobre «{query}»:",
+        "find_stats": "   👥 {subscribers} · publicaciones este mes: {month} · sobre el tema {on_topic} de {sampled}",
+        "find_nothing": "No encontré canales activos sobre «{query}». Busqué: {terms}",
+        "find_hint": "Pulsa ➕ para añadir un canal al bot. No hace falta suscribirse.",
+    },
+    "fr": {
+        "help_search": (
+            "/search &lt;sujet&gt; [jours] - chercher des publications dans tes canaux, 30 jours par défaut\n"
+            "/find &lt;sujet&gt; - trouver de nouveaux canaux actifs sur un sujet"
+        ),
+        "cmd_search": "chercher dans tes canaux",
+        "cmd_find": "trouver de nouveaux canaux",
+        "search_prompt": (
+            "Que dois-je chercher ? Par exemple : <code>/search Rokid</code> ou "
+            "<code>/search lunettes connectées, smart glasses 14</code> - le nombre final est en jours (30 par défaut)."
+        ),
+        "searching": "Je cherche dans tes canaux…",
+        "search_title": "🔎 <b>«{query}»</b> · {days} jours · canaux : {channels} · publications : {posts}",
+        "search_terms": "Mots cherchés : {terms}",
+        "search_nothing": "Rien sur «{query}» en {days} jours. Mots cherchés : {terms}",
+        "find_prompt": "Des canaux sur quel sujet ? Par exemple : <code>/find lunettes connectées</code>",
+        "finding": "Je cherche des canaux et vérifie qu'ils sont actifs… cela peut prendre une minute.",
+        "find_title": "🔭 Canaux actifs sur «{query}» :",
+        "find_stats": "   👥 {subscribers} · publications ce mois-ci : {month} · sur le sujet {on_topic} sur {sampled}",
+        "find_nothing": "Aucun canal actif sur «{query}». Mots cherchés : {terms}",
+        "find_hint": "Appuie sur ➕ pour ajouter un canal au bot. Pas besoin de s'abonner.",
+    },
+    "kk": {
+        "help_search": (
+            "/search &lt;тақырып&gt; [күн] - арналарыңнан жазбаларды іздеу, әдепкі 30 күн\n"
+            "/find &lt;тақырып&gt; - тақырып бойынша жаңа белсенді арналар табу"
+        ),
+        "cmd_search": "арналарыңнан іздеу",
+        "cmd_find": "жаңа арналар табу",
+        "search_prompt": (
+            "Не іздейін? Мысалы: <code>/search Rokid</code> немесе "
+            "<code>/search ақылды көзілдірік, smart glasses 14</code> - соңғы сан күн саны (әдепкі 30)."
+        ),
+        "searching": "Арналардан іздеп жатырмын…",
+        "search_title": "🔎 <b>«{query}»</b> · {days} күн · арналар: {channels} · жазбалар: {posts}",
+        "search_terms": "Іздеу сөздері: {terms}",
+        "search_nothing": "«{query}» бойынша {days} күнде ештеңе табылмады. Іздеу сөздері: {terms}",
+        "find_prompt": "Қай тақырыптағы арналарды іздейін? Мысалы: <code>/find ақылды көзілдірік</code>",
+        "finding": "Арналарды іздеп, белсенді ме екенін тексеріп жатырмын… бір минуттай уақыт кетуі мүмкін.",
+        "find_title": "🔭 «{query}» туралы белсенді арналар:",
+        "find_stats": "   👥 {subscribers} · айына жазба: {month} · тақырып бойынша {sampled} ішінен {on_topic}",
+        "find_nothing": "«{query}» туралы белсенді арна табылмады. Іздеу сөздері: {terms}",
+        "find_hint": "Арнаны ботқа қосу үшін ➕ бас. Жазылудың қажеті жоқ.",
+    },
+}
+
 for _lang, _strings in _BUTTONS.items():
     TEXTS[_lang].update(_strings)
+for _lang, _strings in _SEARCH.items():
+    TEXTS[_lang].update(_strings)
+    # the two commands close the command list in /help, right before the schedule line
+    _head, _tail = TEXTS[_lang]["help"].rsplit("\n\n", 1)
+    TEXTS[_lang]["help"] = f"{_head}\n{_strings['help_search']}\n\n{_tail}"
 for _lang, _strings in _GROUPS.items():
     TEXTS[_lang].update(_strings)
 
