@@ -10,7 +10,7 @@
 
 **Your channels → new posts → image captions → 2-6 cited bullets per channel → top highlights → one message. Self-hosted. A few cents a day.**
 
-[![CI](https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml)
+[![CI](https://github.com/AndreySukhanov/summarix-telegram/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreySukhanov/summarix-telegram/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![aiogram](https://img.shields.io/badge/aiogram-3-2CA5E0?logo=telegram&logoColor=white)](https://docs.aiogram.dev/)
 [![Telethon](https://img.shields.io/badge/Telethon-user%20account-26A5E4)](https://docs.telethon.dev/)
@@ -147,8 +147,8 @@ You need four things:
 
 ```bash
 # 1) Clone
-git clone https://github.com/AndreySukhanov/summarix-ai.git
-cd summarix-ai
+git clone https://github.com/AndreySukhanov/summarix-telegram.git
+cd summarix-telegram
 
 # 2) Keys
 cp .env.example .env            # fill in the keys
