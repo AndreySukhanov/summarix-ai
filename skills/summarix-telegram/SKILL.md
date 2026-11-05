@@ -1,5 +1,5 @@
 ---
-name: tgdigest
+name: summarix-telegram
 description: >
   Digest of the user's Telegram channels right inside Claude Code, powered by Summarix: collects
   posts from a hand-picked channel list for a period (24 hours by default) and retells them with
@@ -13,7 +13,7 @@ description: >
   'найди каналы про', 'добавь канал в дайджест'.
 ---
 
-# tgdigest - your Telegram channels, retold with receipts
+# summarix-telegram - your Telegram channels, retold with receipts
 
 `scripts/tgdigest.py` collects posts into a Markdown file; you (Claude) write the retelling - through a helper agent, so hundreds of posts never flood the main context. The Summarix bot, if the user runs it, lives separately: this skill has **its own Telegram session and its own channel list**, reads a window of the last N hours and never moves the bot's read marks, so the bot's daily digest misses nothing.
 
@@ -26,6 +26,8 @@ The skill works on the user's own clone of `summarix-telegram`, not on the plugi
 - `SCRIPT` = `HOME/scripts/tgdigest.py`, `DATA` = `HOME/data/tgdigest/`.
 
 Run `"<PY>" "<SCRIPT>" <command>`. The script prints UTF-8.
+
+If the `summarix-telegram` MCP server is connected (`scripts/mcp_server.py`), its tools do the same without a shell: `fetch_posts`, `read_part`, `search_posts`, `find_channels`, `list_channels`, `add_channels`, `remove_channels`, `list_styles`. The steps below stay the same.
 
 **First run.** Not cloned yet - point the user to the README Quick Start: `git clone`, `pip install -r requirements.txt`, and `TG_API_ID` / `TG_API_HASH` from my.telegram.org in `HOME/.env`. That is all this skill needs - no model key, you write the digest yourself.
 

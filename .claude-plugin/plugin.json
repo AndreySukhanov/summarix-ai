@@ -1,5 +1,5 @@
 {
-  "name": "summarix",
+  "name": "summarix-telegram",
   "version": "1.0.0",
   "description": "Digest of your Telegram channels inside Claude Code: posts from your own channel list retold with a link to every post, in 13 styles, plus channel search and discovery. Powered by Summarix.",
   "author": {
