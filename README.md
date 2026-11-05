@@ -4,7 +4,7 @@
   <a href="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml"><img src="https://github.com/AndreySukhanov/summarix-ai/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <img src="https://img.shields.io/badge/python-3.13-blue" alt="Python 3.13"/>
   <img src="https://img.shields.io/badge/aiogram-3.x-2CA5E0" alt="aiogram 3"/>
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"/>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Source--Available-blue" alt="Source-Available"/></a>
 </p>
 
 **A personal Telegram bot that reads the channels you follow and sends you one short digest a day.**
@@ -153,4 +153,6 @@ pytest
 
 ## License
 
-[MIT](LICENSE)
+**Source-Available** — free to read, run and learn from. Commercial or derivative use requires written permission. See [LICENSE](LICENSE).
+
+Licensing contact: [avsukhanov21@gmail.com](mailto:avsukhanov21@gmail.com)
