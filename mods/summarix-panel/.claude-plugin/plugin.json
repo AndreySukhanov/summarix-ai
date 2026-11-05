@@ -1,6 +1,6 @@
 {
   "name": "summarix-panel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Your Telegram channel digest in a pane beside the chat: every point linked to its post, earlier digests a click away, a new one in one press. Needs Claude Code 2.1.287+.",
   "author": {
     "name": "Andrey Sukhanov",

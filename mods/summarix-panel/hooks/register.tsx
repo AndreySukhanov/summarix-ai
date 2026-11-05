@@ -51,7 +51,7 @@ function stamp(ms: number): string {
 }
 
 function periodPrompt(period: string): string {
-  return `Make a digest of my Telegram channels for the ${period} with the summarix-telegram skill, then show it in the Summarix panel.`
+  return `Make a digest of my Telegram channels for the ${period}, then show it in the Summarix panel.`
 }
 
 export const register: Register = on => {
@@ -63,7 +63,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'show_digest',
       description:
-        'Show a finished Telegram channel digest in the Summarix panel beside the chat. Call it once, right after you write a digest with the summarix-telegram skill, with the same Markdown, keeping every link to its post. The person reads it there and can page back through earlier digests.',
+        'Show a finished Telegram channel digest in the Summarix panel beside the chat. Call it once, right after you write a digest of the person\'s Telegram channels, with the same Markdown, keeping every link to its post. The person reads it there and can page back through earlier digests.',
       inputSchema: {
         type: 'object',
         properties: {
