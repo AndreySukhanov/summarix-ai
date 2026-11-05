@@ -429,3 +429,64 @@ async def test_search_partial_failure_is_not_called_total(env):
     out = await srv.search_posts(["boom", "quantum"])
     assert "may be incomplete" in out and "No channel could be read" not in out
     assert "A cheaper vision model shipped" in await srv.search_posts(["boom", "vision"])
+
+
+# ---------- round three: hardening suggestions ----------
+
+async def test_unknown_style_answer_stays_short(env):
+    await srv.add_channels(["@technews"])
+    out = await srv.fetch_posts(style="x" * 5000)
+    assert out.startswith("Unknown style") and len(out) < 500
+
+
+def test_session_lock_holds_across_processes(tmp_path):
+    """A real second process holds the lock; this one must get Busy, then the lock once it exits."""
+    lock = tmp_path / ".lock"
+    ready = tmp_path / "ready"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(
+                f"""
+                import sys, time, pathlib
+                sys.path.insert(0, {str(ROOT)!r})
+                from scripts import tgdigest as td
+                with td.session_lock(path=pathlib.Path({str(lock)!r})):
+                    pathlib.Path({str(ready)!r}).write_text("1")
+                    time.sleep(3)
+                """
+            ),
+        ]
+    )
+    try:
+        for _ in range(100):
+            if ready.exists():
+                break
+            import time
+
+            time.sleep(0.1)
+        assert ready.exists(), "holder never took the lock"
+        with pytest.raises(td.Busy):
+            with td.session_lock(path=lock):
+                pass
+    finally:
+        holder.wait(timeout=30)
+    with td.session_lock(path=lock):
+        pass
+
+
+async def test_a_part_write_failure_publishes_nothing(env, monkeypatch):
+    await srv.add_channels(["@technews", "@memes"])
+    original = srv._part_path
+
+    def broken_second_part(kind, i):
+        return original(kind, i) if i == 1 else td.DATA / "missing-dir" / f"mcp_{kind}_part{i}.md"
+
+    monkeypatch.setattr(srv, "_part_path", broken_second_part)
+    monkeypatch.setattr(td, "pack", lambda pieces, limit: [[p] for p in pieces])  # one part per channel
+    with pytest.raises(OSError):
+        await srv.fetch_posts()
+    monkeypatch.setattr(srv, "_part_path", original)
+    assert "Nothing to read" in await srv.read_part("posts", 1)  # no manifest: no half result
+    assert not (await srv.fetch_posts()).startswith("Busy")  # locks released after the failure

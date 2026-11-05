@@ -350,7 +350,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-**137 tests, no network**: link and folder parsing, album grouping, citation linking and HTML escaping, message splitting, schedule in local time, read marks only after commit, recap windows, image cost cap, broken channels, groups, search and discovery, settings, the tgdigest companion, the MCP server (schemas and bounds, parts that fit, no stale results, locks that survive cancellation, safe errors, an isolated protocol stream), owner-only access. CI runs them with a flake8 pass on every push to main.
+**140 tests, no network**: link and folder parsing, album grouping, citation linking and HTML escaping, message splitting, schedule in local time, read marks only after commit, recap windows, image cost cap, broken channels, groups, search and discovery, settings, the tgdigest companion, the MCP server (schemas and bounds, parts that fit, no stale results, locks that survive cancellation, safe errors, an isolated protocol stream), owner-only access. CI runs them with a flake8 pass on every push to main.
 
 ---
 

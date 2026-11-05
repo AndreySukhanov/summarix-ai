@@ -326,7 +326,7 @@ async def list_styles() -> str:
 @mcp.tool()
 async def fetch_posts(
     hours: Annotated[int, Field(ge=1, le=720, description="Window in hours, 24 = a day, 168 = a week")] = 24,
-    style: Annotated[str, Field(description="A style key from list_styles")] = "digest",
+    style: Annotated[str, Field(max_length=40, description="A style key from list_styles")] = "digest",
     style_text: Annotated[str | None, Field(max_length=STYLE_TEXT_CHARS, description="Your own voice, overrides style")] = None,
     max_posts: Annotated[int, Field(ge=1, le=100, description="Newest posts per channel")] = 40,
     images: Annotated[int, Field(ge=0, le=30, description="Pictures of picture-only posts to save as local files")] = 0,
@@ -338,7 +338,7 @@ async def fetch_posts(
     with a link to every post and never invent links. A big issue comes in parts: read the rest with
     read_part(kind='posts', part=N). Read-only: the bot's read marks are not touched."""
     if style not in STYLES:
-        return f"Unknown style {style!r}. Styles: {', '.join(STYLES)}"
+        return f"Unknown style {style[:40]!r}. Styles: {', '.join(STYLES)}"
     hours, max_posts, images = min(max(hours, 1), 720), min(max(max_posts, 1), 100), min(max(images, 0), 30)
     style_text = " ".join(style_text.split())[:STYLE_TEXT_CHARS] if style_text else None
     try:
