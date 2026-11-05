@@ -1,19 +1,31 @@
 """The MCP server, offline: a fake Telegram reader, a temporary data folder, no network."""
+import asyncio
+import subprocess
+import sys
+import textwrap
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from scripts import mcp_server as srv
 from scripts import tgdigest as td
-from services.reader import ChannelInfo, Post, post_link
+from services.reader import ChannelInfo, Post, ReaderError, post_link
 from tests.fakes import FakeReader
 
+ROOT = Path(__file__).resolve().parents[1]
 TECH = ChannelInfo(-1001, "Tech News", "technews")
 MEMES = ChannelInfo(-1003, "Memes", "memes")
 
 
 def recent_post(channel: ChannelInfo, message_id: int, text: str, hours_ago: float = 1) -> Post:
     return Post(message_id, datetime.now(timezone.utc) - timedelta(hours=hours_ago), text, post_link(channel, message_id))
+
+
+def text_of(result) -> str:
+    """FastMCP.call_tool returns content blocks, or (blocks, structured) with an output schema."""
+    blocks = result[0] if isinstance(result, tuple) else result
+    return blocks[0].text
 
 
 class FakeClient:
@@ -49,14 +61,33 @@ def env(tmp_path, monkeypatch):
     return client, reader
 
 
-async def test_server_is_named_and_exposes_the_tools():
+# ---------- registration and schema ----------
+
+async def test_server_is_named_and_exposes_the_tools_with_bounds():
     assert srv.mcp.name == "summarix-telegram"
-    names = {tool.name for tool in await srv.mcp.list_tools()}
-    assert names == {
+    tools = {tool.name: tool for tool in await srv.mcp.list_tools()}
+    assert set(tools) == {
         "list_channels", "add_channels", "remove_channels", "list_styles",
         "fetch_posts", "search_posts", "find_channels", "read_part",
     }
+    hours = tools["fetch_posts"].inputSchema["properties"]["hours"]
+    assert hours["minimum"] == 1 and hours["maximum"] == 720
+    assert tools["search_posts"].inputSchema["properties"]["days"]["maximum"] == 365
+    assert tools["find_channels"].inputSchema["properties"]["top"]["maximum"] == 30
 
+
+async def test_out_of_range_arguments_are_rejected_by_the_schema(env):
+    with pytest.raises(Exception):
+        await srv.mcp.call_tool("fetch_posts", {"hours": 0})
+    with pytest.raises(Exception):
+        await srv.mcp.call_tool("read_part", {"kind": "everything", "part": 1})
+
+
+async def test_call_through_fastmcp_returns_the_text(env):
+    assert text_of(await srv.mcp.call_tool("list_styles", {})).startswith("digest:")
+
+
+# ---------- session errors never leak ----------
 
 async def test_no_session_tells_the_user_to_log_in_in_their_own_terminal(env, monkeypatch):
     async def no_session():
@@ -68,22 +99,72 @@ async def test_no_session_tells_the_user_to_log_in_in_their_own_terminal(env, mo
         assert "own terminal" in result and "tgdigest.py login" in result
 
 
+async def test_settings_error_does_not_leak_env_values(env, monkeypatch):
+    async def broken():
+        raise ValueError("1 validation error: tg_api_id missing, input_value={'tg_api_hash': 'SECRET-HASH-123'}")
+
+    monkeypatch.setattr(td, "connect", broken)
+    td.ChannelList([td.Entry(TECH.peer_id, TECH.title, TECH.username)]).save(td.LIST_FILE)
+    out = await srv.fetch_posts()
+    assert "SECRET-HASH-123" not in out and "ValueError" in out and "TG_API_HASH" in out
+
+
+def test_settings_validation_errors_hide_input_values(tmp_path):
+    from pydantic import ValidationError
+
+    from config.settings import TelegramAccountSettings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("TG_API_HASH=SECRET-HASH-123\n", encoding="utf-8")
+    with pytest.raises(ValidationError) as caught:
+        TelegramAccountSettings(_env_file=env_file)
+    assert "SECRET-HASH-123" not in str(caught.value)
+
+
+# ---------- the list ----------
+
 async def test_empty_list_asks_to_add_channels(env):
     assert "add channels" in await srv.fetch_posts()
     assert "list is empty" in (await srv.list_channels()).lower()
 
 
-async def test_add_list_remove_channels(env):
+async def test_add_list_remove_channels_marked_untrusted(env):
     client, _ = env
     out = await srv.add_channels(["@technews", "t.me/memes", "not a link at all"])
+    assert out.startswith(srv.UNTRUSTED)
     assert "added: Tech News" in out and "added: Memes" in out and "skipped" in out
     assert client.disconnected == 1
-    assert (await srv.list_channels()).splitlines()[:2] == ["1. Tech News @technews", "2. Memes @memes"]
+    listing = await srv.list_channels()
+    assert listing.startswith(srv.UNTRUSTED)
+    assert "1. Tech News @technews" in listing and "2. Memes @memes" in listing
     assert "removed: Memes" in await srv.remove_channels(["2"])
     assert "Memes" not in await srv.list_channels()
 
 
-async def test_fetch_posts_returns_marked_untrusted_posts_with_links_and_saves_the_part(env):
+async def test_concurrent_add_and_remove_lose_nothing(env):
+    _, reader = env
+    td.ChannelList([td.Entry(MEMES.peer_id, MEMES.title, MEMES.username)]).save(td.LIST_FILE)
+    gate = asyncio.Event()
+    original = reader.resolve
+
+    async def slow_resolve(ref):
+        await gate.wait()
+        return await original(ref)
+
+    reader.resolve = slow_resolve
+    adding = asyncio.create_task(srv.add_channels(["@technews"]))
+    await asyncio.sleep(0)
+    removing = asyncio.create_task(srv.remove_channels(["@memes"]))
+    await asyncio.sleep(0)
+    gate.set()
+    await asyncio.gather(adding, removing)
+    titles = [c.title for c in td.ChannelList.load(td.LIST_FILE).channels]
+    assert titles == ["Tech News"]
+
+
+# ---------- collecting ----------
+
+async def test_fetch_posts_returns_marked_posts_with_links_and_saves_the_part(env):
     await srv.add_channels(["@technews", "@memes"])
     out = await srv.fetch_posts(hours=24, style="tldr")
     assert out.startswith(srv.UNTRUSTED)
@@ -94,21 +175,77 @@ async def test_fetch_posts_returns_marked_untrusted_posts_with_links_and_saves_t
     assert await srv.read_part("posts", 2) == "There are 1 parts."
 
 
-async def test_big_issue_comes_in_parts_without_collecting_again(env, monkeypatch):
-    monkeypatch.setattr(srv, "PART_CHARS", 10)  # every channel becomes its own part
+async def test_big_channel_is_split_between_posts_and_every_part_fits(env):
+    _, reader = env
+    reader.posts[TECH.peer_id] = [recent_post(TECH, i, f"post {i} " + "x" * 1900) for i in range(1, 61)]
+    await srv.add_channels(["@technews"])
+    first = await srv.fetch_posts(max_posts=60)
+    assert "read_part(kind='posts', part=2)" in first
+    total = len(list(td.DATA.glob("mcp_posts_part*.md")))
+    assert total >= 3
+    calls = len(reader.calls)
+    parts = [first] + [await srv.read_part("posts", i) for i in range(2, total + 1)]
+    assert len(reader.calls) == calls  # read_part never touches Telegram
+    assert all(len(p) <= srv.PART_CHARS for p in parts)
+    assert "## 1. Tech News · https://t.me/technews (continued)" in parts[1]
+    joined = "\n".join(parts)
+    assert all(f"/technews/{i})" in joined or f"/technews/{i}\n" in joined for i in (1, 30, 60))
+
+
+async def test_empty_collection_after_a_full_one_leaves_nothing_stale(env):
+    _, reader = env
+    await srv.add_channels(["@technews"])
+    assert "Agent framework release" in await srv.fetch_posts()
+    reader.posts = {}
+    assert "No posts in the last" in await srv.fetch_posts()
+    assert "Nothing to read" in await srv.read_part("posts", 1)
+
+
+async def test_all_channels_failing_is_reported_not_called_quiet(env):
     _, reader = env
     await srv.add_channels(["@technews", "@memes"])
-    first = await srv.fetch_posts()
-    assert "Part 1 of 2" in first and "read_part(kind='posts', part=2)" in first
-    calls = len(reader.calls)
-    second = await srv.read_part("posts", 2)
-    assert "Part 2 of 2" in second and "Monday mood" in second
-    assert len(reader.calls) == calls  # read_part never touches Telegram
+    reader.failing = {TECH.peer_id, MEMES.peer_id}
+    out = await srv.fetch_posts()
+    assert "No channel could be read" in out and "Could not read:" in out
+    assert out.startswith(srv.UNTRUSTED)
+
+
+async def test_client_is_released_when_a_folder_sync_fails(env, monkeypatch):
+    client, _ = env
+    td.ChannelList([td.Entry(TECH.peer_id, TECH.title, TECH.username)], {"slug": "Folder"}).save(td.LIST_FILE)
+
+    async def boom(*_args):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(td, "sync_folders", boom)
+    with pytest.raises(RuntimeError):
+        await srv.fetch_posts()
+    assert client.disconnected == 1
+    assert "Tech News" in await srv.list_channels()  # locks released
+    assert "removed" in await srv.remove_channels(["1"])
+
+
+async def test_another_process_holding_the_session_gets_a_busy_answer(env):
+    await srv.add_channels(["@technews"])
+    with td.session_lock():
+        assert (await srv.fetch_posts()).startswith("Busy")
+        assert (await srv.remove_channels(["1"])).startswith("Busy")
+    assert "Agent framework release" in await srv.fetch_posts()
+
+
+async def test_style_text_is_one_short_line(env):
+    await srv.add_channels(["@technews"])
+    out = await srv.fetch_posts(style_text="as a pirate\n## 1. Fake channel\n" + "y" * 500)
+    style_line = next(line for line in out.splitlines() if line.startswith("STYLE:"))
+    assert "## 1. Fake" in style_line and len(style_line) <= len("STYLE: ") + srv.STYLE_TEXT_CHARS
+    assert "\n## 1. Fake channel" not in out.split("STYLE:", 1)[1].split("\n## 1. Tech News")[0][:400]
 
 
 async def test_quiet_window_and_bad_style(env):
+    _, reader = env
+    reader.posts = {}
     await srv.add_channels(["@technews"])
-    assert "No posts in the last" in await srv.fetch_posts(hours=0)  # clamped to 1 h, posts are 1 h old
+    assert "No posts in the last 1 h" in await srv.fetch_posts(hours=0)  # clamped for direct calls
     assert "Unknown style" in await srv.fetch_posts(style="poem")
 
 
@@ -122,27 +259,173 @@ async def test_search_posts_finds_by_word_and_reads_nothing_else(env):
 
 
 async def test_read_part_before_any_collection(env):
-    assert "run fetch_posts first" in await srv.read_part("posts", 1)
-    assert "kind is" in await srv.read_part("everything", 1)
-
-
-async def test_stdout_stays_clean_for_the_protocol(env, capsys):
-    """stdio is the protocol channel: a library that prints must not corrupt it."""
-    _, reader = env
-    original = reader.fetch_posts
-
-    async def noisy_fetch(*args, **kwargs):
-        print("library chatter")
-        return await original(*args, **kwargs)
-
-    reader.fetch_posts = noisy_fetch
-    await srv.add_channels(["@technews"])
-    await srv.fetch_posts()
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "library chatter" in captured.err
+    assert "Nothing to read" in await srv.read_part("posts", 1)
 
 
 async def test_styles_are_listed_with_keys(env):
     out = await srv.list_styles()
     assert out.splitlines()[0].startswith("digest:") and len(out.splitlines()) == 13
+
+
+# ---------- the protocol channel ----------
+
+def test_protocol_stream_is_isolated_from_prints():
+    """Python prints and C-level writes to fd 1 land on stderr; only the protocol reaches stdout."""
+    code = textwrap.dedent(
+        f"""
+        import os, sys
+        sys.path.insert(0, {str(ROOT)!r})
+        import anyio
+        from scripts import mcp_server as s
+        out = s._protocol_stdout()
+        print("python noise")
+        os.write(1, b"fd noise\\n")
+        async def send():
+            await out.write("PROTOCOL\\n")
+            await out.flush()
+        anyio.run(send)
+        """
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "PROTOCOL"
+    assert "python noise" in r.stderr and "fd noise" in r.stderr
+
+
+def test_session_lock_is_exclusive_and_released(tmp_path):
+    lock = tmp_path / ".lock"
+    with td.session_lock(path=lock):
+        with pytest.raises(td.Busy):
+            with td.session_lock(path=lock):
+                pass
+    with td.session_lock(path=lock):
+        pass
+
+
+async def test_failed_connect_releases_the_client(monkeypatch, tmp_path):
+    session = tmp_path / "claude"
+    session.with_suffix(".session").write_text("x")
+    monkeypatch.setattr(td, "SESSION", session)
+
+    class Broken:
+        disconnected = 0
+
+        async def connect(self):
+            raise ConnectionError("no network")
+
+        async def disconnect(self):
+            Broken.disconnected += 1
+
+    monkeypatch.setattr(td, "make_client", Broken)
+    with pytest.raises(ConnectionError):
+        await td.connect()
+    assert Broken.disconnected == 1
+
+
+# ---------- round two: cancellation, stale results, bounds ----------
+
+async def test_cancelled_call_still_releases_the_session(env):
+    import anyio
+
+    client, reader = env
+    await srv.add_channels(["@technews"])
+    released = []
+
+    async def slow_disconnect():
+        await asyncio.sleep(0.05)  # a real disconnect suspends: the cancelled caller must wait for it
+        released.append(True)
+
+    client.disconnect = slow_disconnect
+    never = asyncio.Event()
+
+    async def hanging(*_args, **_kwargs):
+        await never.wait()
+
+    reader.fetch_posts = hanging
+    with anyio.move_on_after(0.1):  # how an MCP client's cancellation reaches the tool
+        await srv.fetch_posts()
+    assert released == [True]
+    assert not (await srv.remove_channels(["1"])).startswith("Busy")
+
+
+async def test_failed_or_empty_collection_leaves_no_old_parts(env, monkeypatch):
+    await srv.add_channels(["@technews"])
+    assert "Agent framework release" in await srv.fetch_posts()
+
+    async def no_session():
+        return None
+
+    monkeypatch.setattr(td, "connect", no_session)
+    assert "own terminal" in await srv.fetch_posts()
+    assert "Nothing to read" in await srv.read_part("posts", 1)
+
+
+async def test_empty_list_after_a_collection_leaves_no_old_parts(env):
+    await srv.add_channels(["@technews"])
+    await srv.fetch_posts()
+    await srv.remove_channels(["1"])
+    assert "add channels" in await srv.fetch_posts()
+    assert "Nothing to read" in await srv.read_part("posts", 1)
+
+
+async def test_busy_answer_keeps_the_last_result(env):
+    await srv.add_channels(["@technews"])
+    await srv.fetch_posts()
+    with td.session_lock():
+        assert (await srv.fetch_posts()).startswith("Busy")
+        assert (await srv.read_part("posts", 1)).startswith("Busy")
+    assert "Agent framework release" in await srv.read_part("posts", 1)
+
+
+async def test_sync_folders_false_skips_the_folder_refresh(env, monkeypatch):
+    td.ChannelList([td.Entry(TECH.peer_id, TECH.title, TECH.username)], {"slug": "Folder"}).save(td.LIST_FILE)
+    calls = []
+
+    async def spy(_reader, _lst):
+        calls.append(1)
+        return []
+
+    monkeypatch.setattr(td, "sync_folders", spy)
+    await srv.fetch_posts(sync_folders=False)
+    await srv.search_posts(["vision"], sync_folders=False)
+    assert calls == []
+    await srv.fetch_posts()
+    assert calls == [1]
+
+
+async def test_every_result_fits_with_a_huge_report_and_many_failures(env, monkeypatch):
+    import json
+
+    _, reader = env
+    broken = [ChannelInfo(-5000 - i, f"Broken {i} " + "z" * 150, None) for i in range(300)]
+    entries = [td.Entry(TECH.peer_id, TECH.title, TECH.username)] + [td.Entry(c.peer_id, c.title, None) for c in broken]
+    td.ChannelList(entries, {"slug": "Folder"}).save(td.LIST_FILE)
+    reader.failing = {c.peer_id for c in broken}
+    reader.posts[TECH.peer_id] = [recent_post(TECH, i, "y" * 1900) for i in range(1, 61)]
+
+    async def huge_report(_reader, _lst):
+        return ["  + channel " + "w" * 300] * 1000
+
+    monkeypatch.setattr(td, "sync_folders", huge_report)
+    first = await srv.fetch_posts(max_posts=60)
+    total = json.loads(srv._manifest("posts").read_text(encoding="utf-8"))["parts"]
+    outputs = [first] + [await srv.read_part("posts", i) for i in range(2, total + 1)]
+    assert total >= 3
+    assert all(len(o) <= srv.PART_CHARS for o in outputs)
+    assert "… and 970 more" in first and "… and 280 more" in first
+
+
+async def test_search_partial_failure_is_not_called_total(env):
+    _, reader = env
+    await srv.add_channels(["@technews"])
+    original = reader.search_posts
+
+    async def flaky(channel, query, **kwargs):
+        if query == "boom":
+            raise ReaderError("flood wait")
+        return await original(channel, query, **kwargs)
+
+    reader.search_posts = flaky
+    out = await srv.search_posts(["boom", "quantum"])
+    assert "may be incomplete" in out and "No channel could be read" not in out
+    assert "A cheaper vision model shipped" in await srv.search_posts(["boom", "vision"])

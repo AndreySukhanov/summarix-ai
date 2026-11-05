@@ -19,9 +19,12 @@ Kept apart from the bot on purpose:
 """
 import argparse
 import asyncio
+import contextlib
 import json
+import os
 import sqlite3
 import sys
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -52,6 +55,63 @@ PART_CHARS = 120_000  # what one summarizing agent reads comfortably (Cyrillic i
 SHORT_TEXT = 80  # a photo post with less text than this: the picture carries the news
 MANUAL = "manual"
 DEVICE = "Claude Code tgdigest"  # how the session shows up in Telegram > Devices
+
+
+# ---------- one process at a time ----------
+
+class Busy(RuntimeError):
+    """Another process (the CLI, the skill or the MCP server) holds the session lock."""
+
+
+def _lock_file(handle) -> None:
+    handle.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock_file(handle) -> None:
+    handle.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def session_lock(wait: float = 0.0, path: Path | None = None):
+    """The CLI, the Claude Code skill and the MCP server share one Telethon session file and one
+    channel list. An OS file lock keeps them to one process at a time; the OS releases it if the
+    holder dies, so there is no stale lock to clean up. Raises Busy after `wait` seconds."""
+    path = path or DATA / ".lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(path, "a+b")
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            _lock_file(handle)
+            break
+        except OSError:
+            if time.monotonic() >= deadline:
+                handle.close()
+                raise Busy("another tgdigest process (the CLI, the skill or the MCP server) is using the session")
+            time.sleep(0.2)
+    try:
+        yield
+    finally:
+        try:
+            _unlock_file(handle)
+        finally:
+            handle.close()
 
 
 # ---------- channel list ----------
@@ -337,10 +397,18 @@ async def connect():
     if not SESSION.with_suffix(".session").exists():
         return None
     client = make_client()
-    await client.connect()
-    if not await client.is_user_authorized():
-        await client.disconnect()
-        return None
+    try:
+        await client.connect()
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            return None
+    except BaseException:
+        import anyio
+
+        # shielded: a cancelled caller still waits until the session file is let go
+        with anyio.CancelScope(shield=True), contextlib.suppress(Exception):
+            await client.disconnect()
+        raise
     return client
 
 
@@ -627,9 +695,16 @@ def main() -> None:
         "search": cmd_search,
         "find": cmd_find,
     }
-    result = handlers[args.command](args)
-    if asyncio.iscoroutine(result):
-        asyncio.run(result)
+    if args.command in ("list", "styles"):
+        handlers[args.command](args)
+        return
+    try:
+        with session_lock(wait=30):
+            result = handlers[args.command](args)
+            if asyncio.iscoroutine(result):
+                asyncio.run(result)
+    except Busy as exc:
+        sys.exit(f"Занято: {exc}. Подожди и повтори.")
 
 
 if __name__ == "__main__":

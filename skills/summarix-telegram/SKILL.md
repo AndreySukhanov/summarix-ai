@@ -27,7 +27,7 @@ The skill works on the user's own clone of `summarix-telegram`, not on the plugi
 
 Run `"<PY>" "<SCRIPT>" <command>`. The script prints UTF-8.
 
-If the `summarix-telegram` MCP server is connected (`scripts/mcp_server.py`), its tools do the same without a shell: `fetch_posts`, `read_part`, `search_posts`, `find_channels`, `list_channels`, `add_channels`, `remove_channels`, `list_styles`. The steps below stay the same.
+If the `summarix-telegram` MCP server is connected (`scripts/mcp_server.py`), its tools do the same without a shell: `fetch_posts`, `read_part`, `search_posts`, `find_channels`, `list_channels`, `add_channels`, `remove_channels`, `list_styles`. The steps below stay the same, except where the posts come from: `fetch_posts` returns part 1 and says how many parts there are; read the rest with `read_part(kind='posts', part=N)` and answer follow-ups from `read_part` too, not from `posts_latest.md` - the server keeps its own part files. Search works the same way with `search_posts` and `read_part(kind='search', ...)`. The CLI, the skill and the server share one session: only one of them can use it at a time, and a busy answer means wait a minute.
 
 **First run.** Not cloned yet - point the user to the README Quick Start: `git clone`, `pip install -r requirements.txt`, and `TG_API_ID` / `TG_API_HASH` from my.telegram.org in `HOME/.env`. That is all this skill needs - no model key, you write the digest yourself.
 

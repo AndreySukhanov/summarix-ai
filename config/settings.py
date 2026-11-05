@@ -10,7 +10,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class TelegramAccountSettings(BaseSettings):
     """Just what the one-time login script needs."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # hide_input_in_errors: a validation error must never echo the other .env values (API hash, tokens)
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", hide_input_in_errors=True
+    )
 
     tg_api_id: int
     tg_api_hash: str
