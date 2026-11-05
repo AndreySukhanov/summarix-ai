@@ -126,6 +126,9 @@ every day at DIGEST_TIME                      /digest, /digest 48
 | 🔗 | **Cited bullets** | The model cites post numbers only; the bot renders them as links, so every claim points to its source |
 | 🖼 | **Image captions** | Photos and charts get a one-line caption from a vision model (a separate cheaper one if you like), capped per run |
 | ⭐ | **Highlights** | With news from two or more channels, the top three items lead the digest |
+| 🧩 | **By topic** | One story from several channels becomes one point, linked to every channel's post. The code checks the grouping — every cited fact stays, no post is added — and sends the digest by channel if the check fails |
+| 🔇 | **Word filter** | `/mute giveaway, crypt` keeps posts with those words out; a word matches from its start, so «crypt» also mutes «cryptocurrency». Muted posts cost nothing and count as read |
+| 📝 | **Markdown export** | Set `DIGEST_EXPORT_DIR` and each digest with news is also saved as a Markdown file — into an Obsidian vault or a synced notes folder, links to the posts kept |
 | 🎭 | **13 styles + your prompt** | Digest, Explainer, Insights, TL;DR, ELI5, Storytime, HotTake, Twist, Vibes, Meme, Conspiracy, Roast, Rick — or write your own prompt |
 | 🌍 | **5 languages** | Summaries in Russian, English, Spanish, French or Kazakh, whatever language the channels write in; the interface speaks the same five |
 | 📁 | **Groups from folders** | Send a `t.me/addlist/…` folder link: its channels become a group with its own digest, next to "My channels" |
@@ -184,6 +187,8 @@ docker compose run --rm bot python -m scripts.login
 docker compose up -d
 ```
 
+Docker pulls the ready image `ghcr.io/andreysukhanov/summarix-telegram` (amd64 and arm64: a VPS, a Raspberry Pi, a Mac) — nothing to build. `docker compose build` builds it from source instead.
+
 Without Docker: `pip install -r requirements.txt`, then `python -m scripts.login` and `python run_bot.py`. On Windows, `start_bot.bat` starts it and refuses to start a second copy.
 
 Then open your bot, press Start, and add channels.
@@ -201,7 +206,8 @@ Then open your bot, press Start, and add channels.
 | `/digest 48` | Recap of the last 48 hours, marks nothing |
 | `/search smart glasses 14` | What your channels wrote about a topic in the last 14 days (30 by default) |
 | `/find smart glasses` | New live public channels on a topic, with stats |
-| `/settings` | Style, custom prompt, digest language, interface language, time, timezone |
+| `/settings` | Style, custom prompt, digest language, interface language, time, timezone, layout (by channel or by topic), word filter |
+| `/mute giveaway, promo, crypt` | Skip posts with these words; `/mute off` turns the filter off |
 | `/status` | Model, next scheduled digest, last run with post/image/token counts |
 
 The bot menu has buttons for all of it — a digest per group, a style switch, the channel list.
@@ -222,6 +228,7 @@ All optional, in `.env`. Time, timezone and languages are starting values — ch
 | `MAX_IMAGES_PER_RUN` | `20` | Cost cap: images beyond this are skipped |
 | `LOOKBACK_HOURS` | `24` | How far back the first digest of a newly added channel looks |
 | `MAX_POSTS_PER_CHANNEL` | `60` | Upper bound per channel per digest; a bigger backlog arrives oldest first over the next digests, nothing is skipped |
+| `DIGEST_EXPORT_DIR` | — | A folder for a Markdown copy of each digest with news (an Obsidian vault, a notes folder). In Docker, `exports` is `./exports` next to the compose file |
 
 </details>
 
@@ -370,6 +377,9 @@ pytest
 
 ### How do I summarize Telegram channels with AI?
 Run Summarix: add the channels you follow (`/add`, or a Telegram folder link) and the bot sends one digest a day — 2-6 bullets per channel, the day's highlights first, every bullet linked to its post. `/digest` gives one on demand.
+
+### Can it merge the same news from several channels?
+Yes. In `/settings` choose **Layout → By topic**: a story told by three channels becomes one point with links to all three posts. The code checks the grouping — every cited fact must stay and no post may be added — and sends the digest by channel if the check fails twice.
 
 ### Can it summarize private Telegram channels?
 Yes. It reads through your own Telegram account (Telethon), so any channel you have joined works, private ones included. A regular bot cannot do that on its own.

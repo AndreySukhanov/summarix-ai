@@ -7,6 +7,8 @@ Key facts:
 - Reads channels through the user's own Telegram account (Telethon), so private channels and albums work; the account is used read-only.
 - The bot sends one digest a day (plus /digest on demand): 2-6 bullets per channel, the day's top 3 highlights first; the model cites post numbers only and the bot turns them into links, so links cannot be invented.
 - 13 digest styles plus a custom prompt; summaries in Russian, English, Spanish, French and Kazakh; groups built from Telegram folders (t.me/addlist links); /search across your channels and /find for live new channels.
+- Digest by channel or by topic: in the topic layout the same story from several channels becomes one point linked to every source, and the code rejects a grouping that drops a cited fact or adds a post. A word filter (/mute) keeps posts with chosen words out. Each digest with news can also be saved as Markdown (DIGEST_EXPORT_DIR), e.g. into an Obsidian vault.
+- Ready Docker image: ghcr.io/andreysukhanov/summarix-telegram (amd64, arm64).
 - Images in posts are captioned by a vision model with a per-run cost cap; read marks move only after delivery, so nothing is lost on failure.
 - Works with any OpenAI-compatible API (OpenAI, OpenRouter, DeepSeek, Qwen or a local model). The Claude Code skill and the MCP server need no model key: the client's model writes the digest.
 - MCP server tools: fetch_posts, read_part, search_posts, find_channels, list_channels, add_channels, remove_channels, list_styles.

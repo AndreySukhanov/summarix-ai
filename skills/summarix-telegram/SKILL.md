@@ -48,7 +48,7 @@ If the `summarix-telegram` MCP server is connected (`scripts/mcp_server.py`), it
 ## A digest, step by step
 
 1. **Period.** None named - `--hours 24`. Named - convert: "3 days" = 72, "a week" = 168. Tied to the time of day ("since this morning") - check the current time first.
-2. **Style.** Default `digest`. Named - the key from the table below; a style in the user's own words - `--style-text "..."`.
+2. **Style.** Default `digest`. Named - the key from the table below; a style in the user's own words - `--style-text "..."`. Asked for it by topic ("by topic", "no repeats") - add the **By topic** rule below to the helper prompt. Asked to skip words or subjects ("no giveaways", "without crypto") - `--mute "giveaway, crypt"` on `fetch`: a word matches from its start.
 3. **Collect.** `fetch --hours N [--style KEY]`. The script first syncs folders and prints `folder «...»: +N -M` only when membership changed - pass that on in one line. Then it prints the file path, `part K: path` lines, counts and unreadable channels.
    - **"No tgdigest session"** -> ask the user to run the login command the script printed **in a separate terminal window**. Never relay the login code through the chat, never run it yourself. Stop here.
    - **0 posts** -> say the channels were quiet. No helper.
@@ -128,6 +128,8 @@ Channels with posts: X of Y · posts: Z
 <unreadable channels from the header, if any>
 Only ads: <channels, if any>
 ```
+
+**By topic** (only when asked): add to the helper prompt - "Group by topic instead of by channel: when several channels tell the same story, write ONE bullet and keep the [[k]](link) of every one of them; a line `**<emoji> <topic>**` above each topic; keep every fact, drop only true repeats." Several parts - each part groups its own topics; when assembling, merge the topics that tell the same story across parts and keep all their links.
 
 For one part of several, replace the Highlights block with: "Do not write Highlights; at the very end give 3 candidates for this part as lines `CANDIDATE: ... (channel)`".
 
