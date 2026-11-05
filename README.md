@@ -18,7 +18,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 [![License](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
 
-[Quick Start](#-quick-start) · [What you get](#-what-you-get) · [How It Works](#️-how-it-works) · [Features](#-features) · [Commands](#-commands) · [Privacy](#-privacy-and-security)
+[Quick Start](#-quick-start) · [What you get](#-what-you-get) · [How It Works](#️-how-it-works) · [Features](#-features) · [Commands](#-commands) · [Claude Code plugin](#-claude-code-plugin) · [Privacy](#-privacy-and-security)
 
 </div>
 
@@ -130,7 +130,7 @@ every day at DIGEST_TIME                      /digest, /digest 48
 | ⏰ | **Daily schedule** | Your time and timezone, set from `/settings`; no Celery, no Redis |
 | 🧱 | **Never loses posts** | Read marks only after delivery; a backlog over the per-channel limit arrives oldest first over the next digests |
 | 🔐 | **Owner only** | Every update from anyone but `OWNER_ID` is dropped before any handler runs |
-| 🤖 | **Claude Code companion** | `scripts/tgdigest.py` collects posts into Markdown for a Claude Code skill — its own session and channel list, so the bot's digest misses nothing |
+| 🤖 | **Claude Code plugin** | Two commands install the `tgdigest` skill: your channels retold right in Claude Code, with its own session and channel list, so the bot's digest misses nothing |
 
 ---
 
@@ -201,10 +201,25 @@ All optional, in `.env`. Time, timezone and languages are starting values — ch
 
 </details>
 
-<details>
-<summary><b>🤖 Claude Code companion: tgdigest</b></summary>
+---
 
-`scripts/tgdigest.py` is the Claude Code side of Summarix: it collects posts from a hand-picked channel list into a Markdown file, and Claude writes the digest from that file. It is kept apart from the bot on purpose — its own Telegram session (two processes on one session file trip over each other), its own channel list, and recap only: it moves no read marks, so the bot's daily digest misses nothing.
+## 🤖 Claude Code plugin
+
+Read your channels without leaving the terminal. Summarix ships as a Claude Code plugin with a `tgdigest` skill: ask in plain words — "digest of my channels for 3 days", "roast style, last week", "what did my channels say about smart glasses", "find channels about AI agents" — and Claude collects the posts, retells them with a link to every post and answers follow-ups.
+
+```
+/plugin marketplace add AndreySukhanov/summarix-telegram
+/plugin install summarix@summarix
+```
+
+Prefer a plain skill without the plugin? Copy `skills/tgdigest` into `~/.claude/skills/` - it is the same file.
+
+The skill works on your clone of this repo: set `SUMMARIX_HOME` to it (or tell Claude once where it is), put `TG_API_ID` / `TG_API_HASH` in `.env`, and run the one-time login in your own terminal — `python scripts/tgdigest.py login`. No model key needed: Claude writes the digest itself, in any of the 13 styles.
+
+It has its own Telegram session and its own channel list, and it only reads a recent window — it never moves the bot's read marks. **Run the bot and the plugin side by side; nothing collides.**
+
+<details>
+<summary><b>Script commands behind the skill</b></summary>
 
 ```bash
 python scripts/tgdigest.py login                    # once: phone, code, 2FA
@@ -259,7 +274,9 @@ services/
 database/           channels, groups, digest runs, settings
 scripts/
   login.py          one-time account login
-  tgdigest.py       Claude Code companion
+  tgdigest.py       collector behind the Claude Code skill
+skills/tgdigest/    the Claude Code skill
+.claude-plugin/     plugin and marketplace manifests
 utils/text.py       citations → links, safe HTML, splitting at 4096 chars
 tests/              offline: fake Telegram reader and fake model
 ```

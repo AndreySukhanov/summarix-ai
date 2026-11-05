@@ -1,0 +1,20 @@
+{
+  "name": "summarix",
+  "version": "1.0.0",
+  "description": "Digest of your Telegram channels inside Claude Code: posts from your own channel list retold with a link to every post, in 13 styles, plus channel search and discovery. Powered by Summarix.",
+  "author": {
+    "name": "Andrey Sukhanov",
+    "url": "https://github.com/AndreySukhanov"
+  },
+  "repository": "https://github.com/AndreySukhanov/summarix-telegram",
+  "homepage": "https://github.com/AndreySukhanov/summarix-telegram#readme",
+  "license": "LicenseRef-Source-Available",
+  "keywords": [
+    "telegram",
+    "digest",
+    "summarization",
+    "news",
+    "telethon",
+    "channels"
+  ]
+}
