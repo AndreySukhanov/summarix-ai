@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from services.reader import Post
+from summarix_telegram.services.reader import Post
 
 POST_CHARS_IN_PROMPT = 1500
 

@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
-from database.db import SessionMaker, get_settings
+from summarix_telegram.database.db import SessionMaker, get_settings
 
 
 class OwnerOnly(BaseMiddleware):

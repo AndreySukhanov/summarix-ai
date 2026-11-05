@@ -189,7 +189,7 @@ docker compose up -d
 
 Docker pulls the ready image `ghcr.io/andreysukhanov/summarix-telegram` (amd64 and arm64: a VPS, a Raspberry Pi, a Mac) — nothing to build. `docker compose build` builds it from source instead.
 
-Without Docker: `pip install -r requirements.txt`, then `python -m scripts.login` and `python run_bot.py`. On Windows, `start_bot.bat` starts it and refuses to start a second copy.
+Without Docker, as one command: `pipx install git+https://github.com/AndreySukhanov/summarix-telegram`, then in a folder with your `.env` run `summarix-login` once and `summarix-bot` (or point `SUMMARIX_HOME` at that folder). From a clone: `pip install -r requirements.txt`, then `python -m scripts.login` and `python run_bot.py`. On Windows, `start_bot.bat` starts it and refuses to start a second copy.
 
 Then open your bot, press Start, and add channels.
 
@@ -297,6 +297,12 @@ Claude Desktop, in `claude_desktop_config.json`:
 
 On Windows the interpreter is `.venv\Scripts\python.exe`.
 
+Installed with `pipx install git+https://github.com/AndreySukhanov/summarix-telegram`? Then the server is one command, and `SUMMARIX_HOME` is the folder with your `.env` and `data/`:
+
+```bash
+claude mcp add summarix-telegram -e SUMMARIX_HOME=/path/to/folder -- summarix-mcp
+```
+
 | Tool | What it does |
 |---|---|
 | `fetch_posts` | Posts of the last N hours from your list, with a style; a big issue comes in parts |
@@ -334,30 +340,36 @@ Per digest: one call per image (sent at low detail), one call per channel with n
 <summary><b>📁 Project layout</b></summary>
 
 ```
-bot/
-  main.py           wiring: settings, SQLite, Telethon, model, bot, scheduler, "/" menu
-  handlers.py       commands, groups, digest per group, search and find
-  settings_menu.py  /settings: style, prompt, languages, time, timezone
-  keyboards.py      reply and inline keyboards
-  middlewares.py    owner-only gate
-  texts.py          interface strings in five languages
-services/
-  reader.py         Telethon: resolve channels and folders, fetch posts, albums, photos
-  llm.py            prompts: image captions, channel summary, highlights
-  styles.py         13 styles, each with a prompt per digest language
-  digest.py         build a digest, mark read after delivery
-  search.py         /search query expansion and /find channel discovery
-  scheduler.py      daily run in your timezone
-  refs.py           parse @name, t.me links, invite and folder links
-database/           channels, groups, digest runs, settings
-scripts/
-  login.py          one-time account login
-  tgdigest.py       collector behind the Claude Code skill
-  mcp_server.py     MCP server: the collector as tools
+summarix_telegram/
+  bot/
+    main.py           wiring: settings, SQLite, Telethon, model, bot, scheduler, "/" menu
+    handlers.py       commands, groups, digest per group, search and find
+    settings_menu.py  /settings: style, prompt, languages, time, timezone, layout, word filter
+    keyboards.py      reply and inline keyboards
+    middlewares.py    owner-only gate
+    texts.py          interface strings in five languages
+  services/
+    reader.py         Telethon: resolve channels and folders, fetch posts, albums, photos
+    llm.py            prompts: image captions, channel summary, highlights, grouping by topic
+    styles.py         13 styles, each with a prompt per digest language
+    digest.py         build a digest by channel or by topic, mark read after delivery
+    export.py         a Markdown copy of each digest with news
+    search.py         /search query expansion and /find channel discovery
+    scheduler.py      daily run in your timezone
+    refs.py           parse @name, t.me links, invite and folder links
+  database/           channels, groups, digest runs, settings
+  scripts/
+    login.py          one-time account login
+    tgdigest.py       collector behind the Claude Code skill
+    mcp_server.py     MCP server: the collector as tools
+  utils/text.py       citations → links, safe HTML, splitting at 4096 chars, the word filter
+  cli.py              summarix-bot and summarix-login of the pipx package
+scripts/              the old paths keep working: scripts/tgdigest.py, scripts/mcp_server.py, python -m scripts.login
 skills/summarix-telegram/  the Claude Code skill
+mods/summarix-panel/  the optional panel mod for Claude Code
 .claude-plugin/     plugin and marketplace manifests
-utils/text.py       citations → links, safe HTML, splitting at 4096 chars
 tests/              offline: fake Telegram reader and fake model
+
 ```
 
 </details>
@@ -411,8 +423,8 @@ A local SQLite file with channel names, groups and read marks. Post contents are
 
 The bot is built from small, replaceable parts. Great first contributions:
 
-- A new digest style — one entry in `services/styles.py`
-- A new language — interface strings in `bot/texts.py`, a prompt per style
+- A new digest style — one entry in `summarix_telegram/services/styles.py`
+- A new language — interface strings in `summarix_telegram/bot/texts.py`, a prompt per style
 - A reader feature, tested against the fake Telegram client in `tests/fakes.py`
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Open an issue first for bigger changes — happy to discuss the design.

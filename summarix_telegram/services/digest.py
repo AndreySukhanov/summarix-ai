@@ -13,14 +13,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from bot.texts import t
-from database.db import SessionMaker, get_channel, get_group, get_settings, group_channels, list_channels
-from database.models import DigestRun, Group
-from services.llm import LLM, WORDS_PLAIN, WORDS_STYLED, Usage
-from services.export import export_digest
-from services.reader import ChannelInfo, Post, Reader
-from services.styles import DEFAULT_STYLE, language_name, style_prompt, style_words
-from utils.text import (
+from summarix_telegram.bot.texts import t
+from summarix_telegram.database.db import SessionMaker, get_channel, get_group, get_settings, group_channels, list_channels
+from summarix_telegram.database.models import DigestRun, Group
+from summarix_telegram.services.llm import LLM, WORDS_PLAIN, WORDS_STYLED, Usage
+from summarix_telegram.services.export import export_digest
+from summarix_telegram.services.reader import ChannelInfo, Post, Reader
+from summarix_telegram.services.styles import DEFAULT_STYLE, language_name, style_prompt, style_words
+from summarix_telegram.utils.text import (
     cited_numbers,
     link_refs,
     mute_pattern,

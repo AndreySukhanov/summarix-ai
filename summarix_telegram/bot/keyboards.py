@@ -3,8 +3,8 @@ Keyboards: the persistent main menu and the inline pickers.
 """
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
-from bot.texts import TEXTS, t
-from database.models import Channel, Group
+from summarix_telegram.bot.texts import TEXTS, t
+from summarix_telegram.database.models import Channel, Group
 
 CHANNELS_PER_PAGE = 8
 TIME_PRESETS = ["06:00", "07:00", "08:00", "09:00", "10:00", "12:00", "14:00", "18:00", "20:00", "22:00"]
@@ -43,7 +43,7 @@ def grid(buttons: list[InlineKeyboardButton], per_row: int) -> list[list[InlineK
 
 
 def styles_keyboard(lang: str, current: str, callback_prefix: str) -> InlineKeyboardMarkup:
-    from services.styles import STYLES, style_title
+    from summarix_telegram.services.styles import STYLES, style_title
 
     buttons = [
         InlineKeyboardButton(

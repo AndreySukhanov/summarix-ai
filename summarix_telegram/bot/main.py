@@ -12,20 +12,28 @@ from telethon import TelegramClient
 
 from aiogram.types import BotCommand
 
-from bot.handlers import build_router, send_digest
-from bot.middlewares import OwnerOnly, UiLanguage
-from bot.settings_menu import build_settings_router
-from bot.texts import UI_LANGUAGES, t
-from config.settings import Settings
-from database.db import get_settings, init_models, make_sessionmaker
-from services.digest import DigestService
-from services.llm import LLM
-from services.reader import TelethonReader
-from services.scheduler import run_daily
-from services.search import SearchService
-from services.styles import DEFAULT_STYLE
+from summarix_telegram.bot.handlers import build_router, send_digest
+from summarix_telegram.bot.middlewares import OwnerOnly, UiLanguage
+from summarix_telegram.bot.settings_menu import build_settings_router
+from summarix_telegram.bot.texts import UI_LANGUAGES, t
+from summarix_telegram.config.settings import Settings
+from summarix_telegram.database.db import get_settings, init_models, make_sessionmaker
+from summarix_telegram.services.digest import DigestService
+from summarix_telegram.services.llm import LLM
+from summarix_telegram.services.reader import TelethonReader
+from summarix_telegram.services.scheduler import run_daily
+from summarix_telegram.services.search import SearchService
+from summarix_telegram.services.styles import DEFAULT_STYLE
 
 logger = logging.getLogger("summarix")
+
+
+# A clone runs from its own folder; the pipx package from the folder with .env (or SUMMARIX_HOME).
+IS_CLONE = (Path(__file__).resolve().parents[2] / "run_bot.py").is_file()
+
+
+def login_hint(clone: bool) -> str:
+    return "python -m scripts.login" if clone else "summarix-login (in the folder with your .env, or with SUMMARIX_HOME set)"
 
 
 async def main() -> None:
@@ -41,7 +49,7 @@ async def main() -> None:
     client = TelegramClient(settings.tg_session, settings.tg_api_id, settings.tg_api_hash)
     await client.connect()
     if not await client.is_user_authorized():
-        raise SystemExit("Telegram account is not logged in. Run once: python -m scripts.login")
+        raise SystemExit(f"Telegram account is not logged in. Run once: {login_hint(IS_CLONE)}")
     if (await client.get_me()).bot:
         raise SystemExit("The session belongs to a bot, which cannot read channels. Delete it and log in with your phone.")
 

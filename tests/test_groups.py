@@ -3,8 +3,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytest_asyncio
 
-from bot.handlers import send_digest
-from database.db import (
+from summarix_telegram.bot.handlers import send_digest
+from summarix_telegram.database.db import (
     add_channel,
     add_to_group,
     delete_group,
@@ -17,9 +17,9 @@ from database.db import (
     manual_group,
     remove_from_group,
 )
-from services.digest import DigestService
-from services.reader import ChannelInfo  # noqa: E402
-from services.reader import Fetched, Post, post_link
+from summarix_telegram.services.digest import DigestService
+from summarix_telegram.services.reader import ChannelInfo  # noqa: E402
+from summarix_telegram.services.reader import Fetched, Post, post_link
 from tests.fakes import FakeReader, fake_llm
 
 
@@ -31,7 +31,7 @@ def make_post(channel, message_id, text):
 
 @pytest.fixture(autouse=True)
 def no_real_digest_file(tmp_path, monkeypatch):
-    monkeypatch.setattr("bot.handlers.LAST_DIGEST_PATH", tmp_path / "last_digest.txt")
+    monkeypatch.setattr("summarix_telegram.bot.handlers.LAST_DIGEST_PATH", tmp_path / "last_digest.txt")
 
 AI = ChannelInfo(-1001, "AI news", "ainews")
 GAMES = ChannelInfo(-1002, "Games", "games")

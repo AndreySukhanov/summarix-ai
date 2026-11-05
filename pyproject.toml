@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "summarix-telegram"
+version = "1.2.0"
+description = "Self-hosted Telegram channel summarizer: a bot, a Claude Code skill CLI and an MCP server that turn the channels you follow into one short digest, every point linked to its post."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "LicenseRef-Source-Available"
+license-files = ["LICENSE"]
+authors = [{ name = "Andrey Sukhanov", email = "avsukhanov21@gmail.com" }]
+keywords = ["telegram", "summarizer", "digest", "telegram-bot", "mcp", "mcp-server", "claude-code", "llm"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Communications :: Chat",
+]
+# The same pins as requirements.txt: mcp stays on 1.x, the 2.x line needs pydantic>=2.11, which aiogram 3.17 does not allow.
+dependencies = [
+    "aiogram==3.17.0",
+    "telethon==1.34.0",
+    "openai==1.59.6",
+    "mcp==1.12.4",
+    "SQLAlchemy==2.0.36",
+    "aiosqlite==0.20.0",
+    "greenlet==3.1.1",
+    "pydantic-settings==2.7.1",
+    "tzdata==2025.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/AndreySukhanov/summarix-telegram"
+Source = "https://github.com/AndreySukhanov/summarix-telegram"
+Issues = "https://github.com/AndreySukhanov/summarix-telegram/issues"
+
+[project.scripts]
+summarix-bot = "summarix_telegram.cli:bot"
+summarix-login = "summarix_telegram.cli:login"
+tgdigest = "summarix_telegram.scripts.tgdigest:main"
+summarix-mcp = "summarix_telegram.scripts.mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["summarix_telegram*"]

@@ -3,8 +3,8 @@ from datetime import timedelta
 
 import pytest
 
-from scripts.tgdigest import ChannelList, Section, fetch_all, folder_from_bot_db, pack, render, sync_folders
-from services.reader import ChannelInfo, Post, post_link
+from summarix_telegram.scripts.tgdigest import ChannelList, Section, fetch_all, folder_from_bot_db, pack, render, sync_folders
+from summarix_telegram.services.reader import ChannelInfo, Post, post_link
 from tests.fakes import NOW, FakeReader, make_post
 
 TECH = ChannelInfo(-1001, "Tech News", "technews")
@@ -142,7 +142,7 @@ async def test_photos_only_where_the_picture_is_the_news_and_capped(tmp_path):
 
 
 async def test_muted_posts_never_reach_the_file_nor_cost_a_photo(tmp_path):
-    from utils.text import mute_pattern
+    from summarix_telegram.utils.text import mute_pattern
 
     reader = PhotoReader({
         TECH.peer_id: [photo_post(TECH, 1, ""), photo_post(TECH, 2, "Giveaway: win a phone"), photo_post(TECH, 3, "news")],

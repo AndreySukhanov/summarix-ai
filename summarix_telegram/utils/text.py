@@ -7,7 +7,7 @@ links here. A link the model made up is impossible by construction.
 import html
 import re
 
-from services.reader import Post
+from summarix_telegram.services.reader import Post
 
 TELEGRAM_LIMIT = 4096
 

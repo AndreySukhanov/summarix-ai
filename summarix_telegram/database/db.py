@@ -7,7 +7,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from database.models import Base, BotSettings, Channel, DigestRun, Group, GroupChannel
+from summarix_telegram.database.models import Base, BotSettings, Channel, DigestRun, Group, GroupChannel
 
 SessionMaker = async_sessionmaker[AsyncSession]
 

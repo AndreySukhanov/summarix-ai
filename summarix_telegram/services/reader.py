@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterable, Protocol
 
-from services.refs import ChannelRef
+from summarix_telegram.services.refs import ChannelRef
 
 logger = logging.getLogger(__name__)
 

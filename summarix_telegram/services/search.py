@@ -12,12 +12,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from bot.texts import t
-from database.db import SessionMaker, get_settings, list_channels
-from services.llm import LLM, SEARCH_NONE
-from services.reader import ChannelInfo, Post, ReaderError
-from services.styles import language_name
-from utils.text import link_refs, one_line, split_message
+from summarix_telegram.bot.texts import t
+from summarix_telegram.database.db import SessionMaker, get_settings, list_channels
+from summarix_telegram.services.llm import LLM, SEARCH_NONE
+from summarix_telegram.services.reader import ChannelInfo, Post, ReaderError
+from summarix_telegram.services.styles import language_name
+from summarix_telegram.utils.text import link_refs, one_line, split_message
 
 SEARCH_DAYS = 30
 MAX_DAYS = 365

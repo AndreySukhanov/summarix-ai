@@ -21,7 +21,7 @@ from aiogram.types import (
     MessageOriginChannel,
 )
 
-from bot.keyboards import (
+from summarix_telegram.bot.keyboards import (
     DIGEST_WINDOWS,
     button_texts,
     delete_confirm_keyboard,
@@ -34,8 +34,8 @@ from bot.keyboards import (
     main_menu,
     styles_keyboard,
 )
-from bot.texts import t
-from database.db import (
+from summarix_telegram.bot.texts import t
+from summarix_telegram.database.db import (
     SessionMaker,
     add_to_group,
     delete_group,
@@ -51,12 +51,12 @@ from database.db import (
     remove_from_group,
     update_settings,
 )
-from services.digest import DigestResult, DigestService
-from services.reader import Reader, ReaderError
-from services.refs import ChannelRef, RefError, parse_channel_ref
-from services.scheduler import next_run_at
-from services.search import SearchService, parse_query
-from services.styles import STYLES, style_title
+from summarix_telegram.services.digest import DigestResult, DigestService
+from summarix_telegram.services.reader import Reader, ReaderError
+from summarix_telegram.services.refs import ChannelRef, RefError, parse_channel_ref
+from summarix_telegram.services.scheduler import next_run_at
+from summarix_telegram.services.search import SearchService, parse_query
+from summarix_telegram.services.styles import STYLES, style_title
 
 logger = logging.getLogger(__name__)
 

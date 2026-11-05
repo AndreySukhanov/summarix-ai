@@ -3,11 +3,11 @@ from datetime import timedelta
 import pytest
 import pytest_asyncio
 
-from bot.texts import TEXTS, t
-from database.db import add_channel, init_models, make_sessionmaker
-from scripts.tgdigest import Section, search_blocks
-from services.reader import ChannelInfo, ReaderError
-from services.search import SearchService, find_channels, parse_query, search_posts, split_terms, topic_matcher
+from summarix_telegram.bot.texts import TEXTS, t
+from summarix_telegram.database.db import add_channel, init_models, make_sessionmaker
+from summarix_telegram.scripts.tgdigest import Section, search_blocks
+from summarix_telegram.services.reader import ChannelInfo, ReaderError
+from summarix_telegram.services.search import SearchService, find_channels, parse_query, search_posts, split_terms, topic_matcher
 from tests.fakes import NOW, FakeReader, fake_llm, make_post
 
 DEFAULTS = {"style": "digest", "language": "ru", "digest_time": "09:00", "timezone": "Europe/Moscow"}

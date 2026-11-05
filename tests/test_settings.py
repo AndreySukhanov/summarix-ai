@@ -3,11 +3,11 @@ import re
 import pytest
 import pytest_asyncio
 
-from bot.settings_menu import parse_time, utc_offset, valid_timezone
-from database.db import add_channel, get_settings, init_models, make_sessionmaker, update_settings
-from services.digest import DigestService
-from services.reader import ChannelInfo
-from services.styles import LANGUAGES, STYLES, TIMEZONE_PRESETS, style_prompt, style_words
+from summarix_telegram.bot.settings_menu import parse_time, utc_offset, valid_timezone
+from summarix_telegram.database.db import add_channel, get_settings, init_models, make_sessionmaker, update_settings
+from summarix_telegram.services.digest import DigestService
+from summarix_telegram.services.reader import ChannelInfo
+from summarix_telegram.services.styles import LANGUAGES, STYLES, TIMEZONE_PRESETS, style_prompt, style_words
 from tests.fakes import NOW, FakeReader, fake_llm, make_post
 
 DEFAULTS = {"style": "digest", "language": "ru", "digest_time": "09:00", "timezone": "Europe/Moscow"}
@@ -86,8 +86,8 @@ def test_parse_time(raw, expected):
 
 
 def test_interface_texts_complete_in_all_languages():
-    from bot.keyboards import button_texts
-    from bot.texts import TEXTS, UI_LANGUAGES
+    from summarix_telegram.bot.keyboards import button_texts
+    from summarix_telegram.bot.texts import TEXTS, UI_LANGUAGES
 
     assert UI_LANGUAGES == ("ru", "en", "es", "fr", "kk")
     reference = set(TEXTS["en"])
@@ -130,7 +130,7 @@ def test_timezones():
 
 
 def test_disclaimers_are_stripped_and_names_are_not_in_prompts():
-    from services.llm import strip_disclaimer
+    from summarix_telegram.services.llm import strip_disclaimer
 
     text = "Не могу копировать голос, но вот:\n\nСам пересказ [1]"
     assert strip_disclaimer(text) == "Сам пересказ [1]"

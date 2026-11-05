@@ -3,12 +3,12 @@ from types import SimpleNamespace
 
 import pytest_asyncio
 
-from bot.handlers import extract_refs
-from bot.middlewares import OwnerOnly
-from database.db import add_channel, init_models, last_run, list_channels, make_sessionmaker
-from services.digest import DigestService
-from services.reader import Fetched
-from services.reader import ChannelInfo
+from summarix_telegram.bot.handlers import extract_refs
+from summarix_telegram.bot.middlewares import OwnerOnly
+from summarix_telegram.database.db import add_channel, init_models, last_run, list_channels, make_sessionmaker
+from summarix_telegram.services.digest import DigestService
+from summarix_telegram.services.reader import Fetched
+from summarix_telegram.services.reader import ChannelInfo
 from tests.fakes import NOW, FakeReader, fake_llm, make_post
 
 TECH = ChannelInfo(-1001, "Tech <News>", "technews")

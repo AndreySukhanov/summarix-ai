@@ -4,13 +4,13 @@ from datetime import datetime, timezone
 
 import pytest_asyncio
 
-from bot.settings_menu import mute_value
-from database.db import add_channel, init_models, make_sessionmaker, update_settings
-from services.digest import DigestService
-from services.export import export_digest, html_to_markdown
-from services.reader import ChannelInfo
+from summarix_telegram.bot.settings_menu import mute_value
+from summarix_telegram.database.db import add_channel, init_models, make_sessionmaker, update_settings
+from summarix_telegram.services.digest import DigestService
+from summarix_telegram.services.export import export_digest, html_to_markdown
+from summarix_telegram.services.reader import ChannelInfo
 from tests.fakes import NOW, FakeReader, default_reply, fake_llm, make_post
-from utils.text import link_refs, mute_pattern, parse_words, renumber_refs
+from summarix_telegram.utils.text import link_refs, mute_pattern, parse_words, renumber_refs
 
 TECH = ChannelInfo(-1001, "Tech <News>", "technews")
 PRIV = ChannelInfo(-1002, "Private notes", None)
@@ -191,7 +191,7 @@ async def test_one_channel_needs_no_grouping(sessions):
 
 
 def test_a_header_the_model_wrote_is_escaped_not_trusted_as_html():
-    from services.digest import _Topics
+    from summarix_telegram.services.digest import _Topics
 
     posts = [make_post(TECH, 10, "x")]
     blocks = DigestService._topic_blocks(_Topics("## <b>Hi</b> & co\n• fact [1]", posts, ["Tech"], []))
@@ -316,7 +316,7 @@ async def test_dropping_one_of_several_citations_of_a_channel_is_caught(sessions
 
 
 async def test_an_export_failure_of_any_kind_does_not_stop_the_run(sessions, tmp_path, monkeypatch):
-    import services.digest as digest_module
+    import summarix_telegram.services.digest as digest_module
 
     def broken(*args, **kwargs):
         raise ValueError("odd file name")
@@ -368,3 +368,45 @@ async def test_an_older_database_gets_layout_and_mute_columns(tmp_path):
 
 def test_now_is_timezone_aware():
     assert NOW.tzinfo is timezone.utc
+
+
+# ---- login hints of the clone and of the pipx package ----
+
+def test_login_hints_fit_the_layout():
+    from summarix_telegram.bot.main import login_hint
+    from summarix_telegram.scripts import tgdigest as td
+
+    assert login_hint(True) == "python -m scripts.login"
+    assert login_hint(False).startswith("summarix-login")
+    assert td.IS_CLONE and "tgdigest.py" in td.NO_SESSION  # the tests run from a clone
+
+
+def test_the_login_line_works_in_every_shell_and_names_the_data_folder():
+    from pathlib import Path
+
+    from summarix_telegram.scripts.tgdigest import login_hint
+
+    home = Path("D:/My Digest")
+    clone = '"C:/py/python.exe" "C:/src/summarix/scripts/tgdigest.py"'
+    windows = login_hint(clone, home, windows=True)
+    assert f'$env:SUMMARIX_HOME = "{home}"; & {clone} login' in windows  # PowerShell needs & for a quoted path
+    assert f'set "SUMMARIX_HOME={home}" && {clone} login' in windows  # cmd: no cd, so no drive to switch
+    assert "cd " not in windows
+    assert login_hint("tgdigest", home, windows=False) == f'  SUMMARIX_HOME="{home}" tgdigest login'
+    assert login_hint("tgdigest", None, windows=False) == "  tgdigest login"
+    assert "PowerShell:  tgdigest login" in login_hint("tgdigest", None, windows=True)
+
+
+def test_the_mcp_hint_follows_code_and_data_separately(monkeypatch):
+    import importlib
+
+    from summarix_telegram.scripts import mcp_server, tgdigest as td
+
+    monkeypatch.setattr(td, "OWN_HOME", True)
+    hint = importlib.reload(mcp_server).NO_SESSION
+    assert "scripts/tgdigest.py login" in hint and "SUMMARIX_HOME set to the same folder" in hint
+    monkeypatch.setattr(td, "IS_CLONE", False)
+    hint = importlib.reload(mcp_server).NO_SESSION
+    assert "tgdigest login, with SUMMARIX_HOME" in hint and "scripts/" not in hint
+    monkeypatch.undo()
+    importlib.reload(mcp_server)

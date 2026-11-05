@@ -19,3 +19,8 @@ docs/banner.html
 
 # local Windows shortcut (absolute path)
 *.lnk
+
+# packaging builds
+build/
+dist/
+*.egg-info/

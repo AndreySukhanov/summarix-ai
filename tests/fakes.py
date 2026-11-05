@@ -3,9 +3,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from services.llm import LLM
-from services.reader import ChannelInfo, Folder, Post, ReaderError, post_link
-from services.refs import ChannelRef
+from summarix_telegram.services.llm import LLM
+from summarix_telegram.services.reader import ChannelInfo, Folder, Post, ReaderError, post_link
+from summarix_telegram.services.refs import ChannelRef
 
 NOW = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
 

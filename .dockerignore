@@ -7,3 +7,6 @@ data/
 __pycache__/
 .pytest_cache/
 tests/
+build/
+dist/
+*.egg-info/

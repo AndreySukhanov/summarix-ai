@@ -189,7 +189,7 @@ docker compose up -d
 
 Docker скачает готовый образ `ghcr.io/andreysukhanov/summarix-telegram` (amd64 и arm64: VPS, Raspberry Pi, Mac) - собирать ничего не нужно. `docker compose build` соберёт его из исходников.
 
-Без Docker: `pip install -r requirements.txt`, затем `python -m scripts.login` и `python run_bot.py`. На Windows бота запускает `start_bot.bat` и не даёт открыть вторую копию.
+Без Docker одной командой: `pipx install git+https://github.com/AndreySukhanov/summarix-telegram`, затем в папке с вашим `.env` один раз `summarix-login` и `summarix-bot` (или укажите эту папку в `SUMMARIX_HOME`). Из клона: `pip install -r requirements.txt`, затем `python -m scripts.login` и `python run_bot.py`. На Windows бота запускает `start_bot.bat` и не даёт открыть вторую копию.
 
 Дальше откройте бота, нажмите Start и добавьте каналы.
 
@@ -297,6 +297,12 @@ Claude Desktop, в `claude_desktop_config.json`:
 
 На Windows интерпретатор — `.venv\Scripts\python.exe`.
 
+Установили через `pipx install git+https://github.com/AndreySukhanov/summarix-telegram`? Тогда сервер - одна команда, а `SUMMARIX_HOME` - папка с вашим `.env` и `data/`:
+
+```bash
+claude mcp add summarix-telegram -e SUMMARIX_HOME=/path/to/folder -- summarix-mcp
+```
+
 | Инструмент | Что делает |
 |---|---|
 | `fetch_posts` | Посты за последние N часов из вашего списка, в выбранном стиле; большой выпуск приходит частями |
@@ -334,30 +340,36 @@ Claude Desktop, в `claude_desktop_config.json`:
 <summary><b>📁 Структура проекта</b></summary>
 
 ```
-bot/
-  main.py           сборка: настройки, SQLite, Telethon, модель, бот, расписание, меню «/»
-  handlers.py       команды, группы, дайджест по группе, поиск и find
-  settings_menu.py  /settings: стиль, промпт, языки, время, часовой пояс
-  keyboards.py      обычные и inline-клавиатуры
-  middlewares.py    доступ только владельцу
-  texts.py          строки интерфейса на пяти языках
-services/
-  reader.py         Telethon: каналы и папки, посты, альбомы, фото
-  llm.py            промпты: подписи к картинкам, пересказ канала, главное
-  styles.py         13 стилей, у каждого промпт на каждом языке дайджеста
-  digest.py         сборка дайджеста, отметки после доставки
-  search.py         расширение запроса /search и поиск каналов /find
-  scheduler.py      ежедневный запуск в вашем часовом поясе
-  refs.py           разбор @name, ссылок t.me, приглашений и папок
-database/           каналы, группы, запуски дайджеста, настройки
-scripts/
-  login.py          одноразовый вход в аккаунт
-  tgdigest.py       сборщик под скиллом для Claude Code
-  mcp_server.py     MCP-сервер: сборщик как инструменты
+summarix_telegram/
+  bot/
+    main.py           сборка: настройки, SQLite, Telethon, модель, бот, расписание, меню «/»
+    handlers.py       команды, группы, дайджест по группе, поиск и find
+    settings_menu.py  /settings: стиль, промпт, языки, время, часовой пояс, раскладка, фильтр слов
+    keyboards.py      обычные и inline-клавиатуры
+    middlewares.py    доступ только владельцу
+    texts.py          строки интерфейса на пяти языках
+  services/
+    reader.py         Telethon: каналы и папки, посты, альбомы, фото
+    llm.py            промпты: подписи к картинкам, пересказ канала, главное, группировка по темам
+    styles.py         13 стилей, у каждого промпт на каждом языке дайджеста
+    digest.py         сборка дайджеста по каналам или по темам, отметки после доставки
+    export.py         Markdown-копия каждого дайджеста с новостями
+    search.py         расширение запроса /search и поиск каналов /find
+    scheduler.py      ежедневный запуск в вашем часовом поясе
+    refs.py           разбор @name, ссылок t.me, приглашений и папок
+  database/           каналы, группы, запуски дайджеста, настройки
+  scripts/
+    login.py          одноразовый вход в аккаунт
+    tgdigest.py       сборщик под скиллом для Claude Code
+    mcp_server.py     MCP-сервер: сборщик как инструменты
+  utils/text.py       номера → ссылки, безопасный HTML, деление на 4096 символов, фильтр слов
+  cli.py              summarix-bot и summarix-login из пакета для pipx
+scripts/              старые пути работают: scripts/tgdigest.py, scripts/mcp_server.py, python -m scripts.login
 skills/summarix-telegram/  скилл для Claude Code
+mods/summarix-panel/  необязательный мод-панель для Claude Code
 .claude-plugin/     манифесты плагина и marketplace
-utils/text.py       номера → ссылки, безопасный HTML, деление на 4096 символов
 tests/              офлайн: подставной Telegram и подставная модель
+
 ```
 
 </details>
@@ -413,8 +425,8 @@ pytest
 
 Бот собран из небольших заменяемых частей. Хорошие первые вклады:
 
-- Новый стиль дайджеста — одна запись в `services/styles.py`
-- Новый язык — строки интерфейса в `bot/texts.py` и промпт для каждого стиля
+- Новый стиль дайджеста — одна запись в `summarix_telegram/services/styles.py`
+- Новый язык — строки интерфейса в `summarix_telegram/bot/texts.py` и промпт для каждого стиля
 - Новая возможность чтения, с тестом на подставном Telegram-клиенте из `tests/fakes.py`
 
 См. [CONTRIBUTING.md](CONTRIBUTING.md). Для крупных изменений сначала откройте issue — с радостью обсудим устройство.

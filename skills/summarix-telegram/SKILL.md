@@ -24,6 +24,7 @@ The skill works on the user's own clone of `summarix-telegram`, not on the plugi
 - `HOME` = the `SUMMARIX_HOME` environment variable, or the path the user gave you earlier (check your memory). Neither - ask once where they cloned the repo, then remember it.
 - `PY` = `HOME/.venv/bin/python` (Windows: `HOME\.venv\Scripts\python.exe`); no venv - plain `python` with the requirements installed.
 - `SCRIPT` = `HOME/scripts/tgdigest.py`, `DATA` = `HOME/data/tgdigest/`.
+- Installed with pipx instead of a clone (`tgdigest` is on PATH): run `tgdigest <command>` with `SUMMARIX_HOME` set to the folder that holds `.env` and `data/`.
 
 Run `"<PY>" "<SCRIPT>" <command>`. The script prints UTF-8.
 

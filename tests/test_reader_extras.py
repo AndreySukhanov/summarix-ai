@@ -16,8 +16,8 @@ from telethon.tl.types import (
     MessageEntityUrl,
 )
 
-from scripts.tgdigest import Section, render
-from services.reader import ChannelInfo, ReaderError, TelethonReader, hidden_links
+from summarix_telegram.scripts.tgdigest import Section, render
+from summarix_telegram.services.reader import ChannelInfo, ReaderError, TelethonReader, hidden_links
 from tests.fakes import NOW, make_post
 
 DEVSP = ChannelInfo(-1004, "Data Science", "devsp")

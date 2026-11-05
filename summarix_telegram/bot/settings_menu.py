@@ -13,11 +13,11 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.keyboards import TIME_PRESETS, button_texts, grid, main_menu
-from bot.texts import UI_LANGUAGES, t
-from database.db import SessionMaker, get_settings, update_settings
-from services.styles import LANGUAGES, STYLES, TIMEZONE_PRESETS, style_title
-from utils.text import parse_words
+from summarix_telegram.bot.keyboards import TIME_PRESETS, button_texts, grid, main_menu
+from summarix_telegram.bot.texts import UI_LANGUAGES, t
+from summarix_telegram.database.db import SessionMaker, get_settings, update_settings
+from summarix_telegram.services.styles import LANGUAGES, STYLES, TIMEZONE_PRESETS, style_title
+from summarix_telegram.utils.text import parse_words
 
 _TIME = re.compile(r"^([01]?\d|2[0-3])[:.]([0-5]\d)$")
 MAX_PROMPT_CHARS = 1500

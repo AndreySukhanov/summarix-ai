@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from scripts import mcp_server as srv
-from scripts import tgdigest as td
-from services.reader import ChannelInfo, Post, ReaderError, post_link
+from summarix_telegram.scripts import mcp_server as srv
+from summarix_telegram.scripts import tgdigest as td
+from summarix_telegram.services.reader import ChannelInfo, Post, ReaderError, post_link
 from tests.fakes import FakeReader
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,7 +112,7 @@ async def test_settings_error_does_not_leak_env_values(env, monkeypatch):
 def test_settings_validation_errors_hide_input_values(tmp_path):
     from pydantic import ValidationError
 
-    from config.settings import TelegramAccountSettings
+    from summarix_telegram.config.settings import TelegramAccountSettings
 
     env_file = tmp_path / ".env"
     env_file.write_text("TG_API_HASH=SECRET-HASH-123\n", encoding="utf-8")
@@ -276,7 +276,7 @@ def test_protocol_stream_is_isolated_from_prints():
         import os, sys
         sys.path.insert(0, {str(ROOT)!r})
         import anyio
-        from scripts import mcp_server as s
+        from summarix_telegram.scripts import mcp_server as s
         out = s._protocol_stdout()
         print("python noise")
         os.write(1, b"fd noise\\n")
@@ -451,7 +451,7 @@ def test_session_lock_holds_across_processes(tmp_path):
                 f"""
                 import sys, time, pathlib
                 sys.path.insert(0, {str(ROOT)!r})
-                from scripts import tgdigest as td
+                from summarix_telegram.scripts import tgdigest as td
                 with td.session_lock(path=pathlib.Path({str(lock)!r})):
                     pathlib.Path({str(ready)!r}).write_text("1")
                     time.sleep(3)

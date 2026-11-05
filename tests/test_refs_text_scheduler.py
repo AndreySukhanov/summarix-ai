@@ -4,11 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.reader import ChannelInfo, group_messages, post_link
-from services.refs import ChannelRef, RefError, parse_channel_ref
-from services.scheduler import next_run_at, run_daily
+from summarix_telegram.services.reader import ChannelInfo, group_messages, post_link
+from summarix_telegram.services.refs import ChannelRef, RefError, parse_channel_ref
+from summarix_telegram.services.scheduler import next_run_at, run_daily
 from tests.fakes import NOW, make_post
-from utils.text import link_refs, split_message
+from summarix_telegram.utils.text import link_refs, split_message
 
 
 @pytest.mark.parametrize(
