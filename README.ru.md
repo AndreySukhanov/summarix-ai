@@ -16,6 +16,7 @@
 
 [![CI](https://github.com/AndreySukhanov/summarix-telegram/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreySukhanov/summarix-telegram/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PyPI](https://img.shields.io/pypi/v/summarix-telegram?color=3775A9&logo=pypi&logoColor=white)](https://pypi.org/project/summarix-telegram/)
 [![aiogram](https://img.shields.io/badge/aiogram-3-2CA5E0?logo=telegram&logoColor=white)](https://docs.aiogram.dev/)
 [![Telethon](https://img.shields.io/badge/Telethon-user%20account-26A5E4)](https://docs.telethon.dev/)
 [![LLM](https://img.shields.io/badge/LLM-any%20OpenAI--compatible%20API-6566F1)](#-быстрый-старт)
@@ -191,7 +192,7 @@ docker compose up -d
 
 Docker скачает готовый образ `ghcr.io/andreysukhanov/summarix-telegram` (amd64 и arm64: VPS, Raspberry Pi, Mac) - собирать ничего не нужно. `docker compose build` соберёт его из исходников.
 
-Без Docker одной командой: `pipx install git+https://github.com/AndreySukhanov/summarix-telegram`, затем в папке с вашим `.env` один раз `summarix-login` и `summarix-bot` (или укажите эту папку в `SUMMARIX_HOME`). Из клона: `pip install -r requirements.txt`, затем `python -m scripts.login` и `python run_bot.py`. На Windows бота запускает `start_bot.bat` и не даёт открыть вторую копию.
+Без Docker одной командой: `pipx install summarix-telegram`, затем в папке с вашим `.env` один раз `summarix-login` и `summarix-bot` (или укажите эту папку в `SUMMARIX_HOME`). Из клона: `pip install -r requirements.txt`, затем `python -m scripts.login` и `python run_bot.py`. На Windows бота запускает `start_bot.bat` и не даёт открыть вторую копию.
 
 Дальше откройте бота, нажмите Start и добавьте каналы.
 
@@ -299,7 +300,7 @@ Claude Desktop, в `claude_desktop_config.json`:
 
 На Windows интерпретатор — `.venv\Scripts\python.exe`.
 
-Установили через `pipx install git+https://github.com/AndreySukhanov/summarix-telegram`? Тогда сервер - одна команда, а `SUMMARIX_HOME` - папка с вашим `.env` и `data/`:
+Установили через `pipx install summarix-telegram`? Тогда сервер - одна команда, а `SUMMARIX_HOME` - папка с вашим `.env` и `data/`:
 
 ```bash
 claude mcp add summarix-telegram -e SUMMARIX_HOME=/path/to/folder -- summarix-mcp
