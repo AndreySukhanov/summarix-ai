@@ -1,7 +1,9 @@
 services:
   bot:
+    image: ghcr.io/andreysukhanov/summarix-telegram:latest   # the ready image; `docker compose build` builds it from source instead
     build: .
     env_file: .env
     volumes:
-      - ./data:/app/data   # SQLite database and the Telegram session file
+      - ./data:/app/data         # SQLite database and the Telegram session file
+      - ./exports:/app/exports   # Markdown copies of each digest, with DIGEST_EXPORT_DIR=exports
     restart: unless-stopped
