@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -38,6 +39,7 @@ from services.reader import ChannelInfo, Post, ReaderError, TelethonReader  # no
 from services.refs import RefError, parse_channel_ref  # noqa: E402
 from services.search import PER_CHANNEL, SEARCH_DAYS, TOP_CHANNELS, find_channels, search_posts  # noqa: E402
 from services.styles import DEFAULT_STYLE, STYLES, style_prompt, style_title  # noqa: E402
+from utils.text import mute_pattern, parse_words  # noqa: E402
 
 DATA = ROOT / "data" / "tgdigest"
 SESSION = DATA / "claude"  # Telethon appends .session
@@ -259,12 +261,17 @@ async def fetch_all(
     image_budget: int = DEFAULT_IMAGES,
     images_dir: Path = IMAGES_DIR,
     concurrency: int = 4,
+    mute: re.Pattern | None = None,
+    stats: dict | None = None,
 ) -> tuple[list[Section], list[str]]:
     """Recap of every channel since `since`, list order kept. Photos only for posts where the
-    picture is the news (little or no text), capped per run."""
+    picture is the news (little or no text), capped per run. `mute` (utils.text.mute_pattern)
+    drops posts with the filter's words before any photo is fetched; `stats["muted"]` counts them."""
     gate = asyncio.Semaphore(concurrency)
     budget = {"images": image_budget}
     errors: list[str] = []
+    if stats is not None:
+        stats.setdefault("muted", 0)
 
     async def one(info: ChannelInfo) -> Section | None:
         async with gate:
@@ -273,6 +280,11 @@ async def fetch_all(
             except Exception as exc:  # one broken channel must not kill the run
                 errors.append(f"{info.title} ({exc})")
                 return None
+            if mute is not None:
+                kept = [p for p in posts if not mute.search(p.text or "")]
+                if stats is not None:
+                    stats["muted"] += len(posts) - len(kept)
+                posts = kept
             if not posts:
                 return None
             section = Section(info, posts)
@@ -618,6 +630,8 @@ async def cmd_fetch(args) -> None:
     for old in IMAGES_DIR.glob("*.jpg") if IMAGES_DIR.exists() else []:
         old.unlink()
     now = datetime.now(timezone.utc)
+    mute_words = parse_words(args.mute)
+    stats: dict = {}
     try:
         sections, errors = await fetch_all(
             TelethonReader(client),
@@ -625,6 +639,8 @@ async def cmd_fetch(args) -> None:
             since=now - timedelta(hours=args.hours),
             max_posts=args.max_posts,
             image_budget=args.images,
+            mute=mute_pattern(mute_words),
+            stats=stats,
         )
     finally:
         await client.disconnect()
@@ -637,6 +653,8 @@ async def cmd_fetch(args) -> None:
         style_key="свой" if args.style_text else args.style,
         style_text=args.style_text or style_prompt(args.style, "ru"),
     )
+    if mute_words:
+        header = header.rstrip("\n") + f"\nФильтр слов: {', '.join(mute_words)}; пропущено постов: {stats['muted']}\n"
     text = write_output(POSTS_FILE, header, blocks)
     posts = sum(len(s.posts) for s in sections)
     images = sum(len(s.images) for s in sections)
@@ -673,6 +691,7 @@ def main() -> None:
     fetch.add_argument("--style", choices=list(STYLES), default=DEFAULT_STYLE)
     fetch.add_argument("--style-text", help="your own style description instead of a preset")
     fetch.add_argument("--no-sync", action="store_true", help="skip refreshing the folders first")
+    fetch.add_argument("--mute", help='skip posts with these words, e.g. "giveaway, promo, crypt"')
     sub.add_parser("styles", help="available styles")
     search = sub.add_parser("search", help="posts of the list matching any of the terms, into a Markdown file")
     search.add_argument("terms", nargs="+", help="word forms and synonyms: Telegram matches whole words only")

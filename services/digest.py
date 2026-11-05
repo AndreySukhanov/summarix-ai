@@ -1,23 +1,35 @@
 """
-Building a digest: read new posts per channel -> caption images -> summarize -> compose.
+Building a digest: read new posts per channel -> drop muted posts -> caption images -> summarize
+-> compose, by channel or by topic.
 
 Read marks move only after the digest was delivered (`commit`), so a crash or a failed
-send never swallows posts.
+send never swallows posts; muted posts count as read.
 """
 import asyncio
 import html
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from bot.texts import t
 from database.db import SessionMaker, get_channel, get_group, get_settings, group_channels, list_channels
 from database.models import DigestRun, Group
 from services.llm import LLM, WORDS_PLAIN, WORDS_STYLED, Usage
+from services.export import export_digest
 from services.reader import ChannelInfo, Post, Reader
 from services.styles import DEFAULT_STYLE, language_name, style_prompt, style_words
-from utils.text import link_refs, one_line, split_message
+from utils.text import (
+    cited_numbers,
+    link_refs,
+    mute_pattern,
+    one_line,
+    parse_words,
+    renumber_refs,
+    split_message,
+    strip_refs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +48,9 @@ class DigestResult:
     read_marks: dict[int, int] = field(default_factory=dict)  # peer_id -> newest message id seen
     group_id: int | None = None
     usage: Usage = field(default_factory=Usage)  # tokens of this build, logged on commit
+    muted: int = 0  # posts the word filter kept out
+    group_title: str | None = None  # plain, for the export file name
+    built_at: datetime | None = None
 
 
 @dataclass
@@ -43,6 +58,17 @@ class _Section:
     channel: ChannelInfo
     posts: list[Post]
     summary: str
+
+
+@dataclass
+class _Topics:
+    """A digest by topic: the grouped text cites numbers into `posts`, labelled by channel;
+    `rest` are channels whose retelling cites no post, so the grouping never saw them."""
+
+    text: str
+    posts: list[Post]
+    labels: list[str]
+    rest: list[_Section]
 
 
 class DigestService:
@@ -59,8 +85,10 @@ class DigestService:
         ui_language: str = "ru",
         defaults: dict | None = None,
         concurrency: int = 6,
+        export_dir: Path | None = None,
     ):
         self.concurrency = concurrency
+        self.export_dir = export_dir
         self.sessions = sessions
         self.reader = reader
         self.llm = llm
@@ -108,11 +136,15 @@ class DigestService:
         style = style_prompt(prefs.style, prefs.language, prefs.custom_prompt)
         plain = prefs.style == DEFAULT_STYLE and not prefs.custom_prompt
         words = WORDS_PLAIN if plain else style_words(prefs.style, prefs.custom_prompt) or WORDS_STYLED
+        by_topic = (prefs.layout or "channels") == "topics"
+        muted = mute_pattern(parse_words(prefs.mute_words))
         if not channels:
             return DigestResult(messages=[t(self.lang, "no_channels")], group_id=group_id)
 
         budget = budget if budget is not None else self.new_budget()
-        result = DigestResult(messages=[], group_id=group_id, usage=self.llm.usage)
+        result = DigestResult(
+            messages=[], group_id=group_id, usage=self.llm.usage, group_title=group_title, built_at=now
+        )
         recap = window_hours is not None
         gate = asyncio.Semaphore(self.concurrency)
         scanned: dict[int, int] = {}  # peer_id -> last message read, posts or not
@@ -130,6 +162,13 @@ class DigestService:
                         info, after_id=unread_after, since=since, limit=self.max_posts, with_images=False
                     )
                     scanned[info.peer_id] = getattr(posts, "scanned_up_to", 0)
+                    if muted is not None:  # before captions: a muted post costs nothing
+                        kept = [p for p in posts if not muted.search(p.text or "")]
+                        result.muted += len(posts) - len(kept)
+                        if len(kept) < len(posts):  # muted posts still count as read
+                            top = max(p.read_up_to for p in posts)
+                            scanned[info.peer_id] = max(scanned[info.peer_id], top)
+                        posts = kept
                     if not posts:
                         return None
                     for post in posts:
@@ -169,15 +208,76 @@ class DigestService:
                     result.read_marks[peer_id] = last
 
         result.channels_with_news = len(sections)
+        topics = await self._topics(sections, style) if by_topic and len(sections) >= 2 else None
         highlights = ""
-        if len(sections) >= 2:
+        if len(sections) >= 2 and topics is None:  # topics already lead with what matters most
             try:
                 highlights = await self.llm.highlights([(s.channel.title, s.summary) for s in sections], style)
             except Exception as exc:
                 logger.warning("highlights failed: %s", exc)
 
-        result.messages = split_message(self._compose(sections, highlights, result, window_hours, now, group_title))
+        result.messages = split_message(
+            self._compose(sections, highlights, result, window_hours, now, group_title, topics)
+        )
         return result
+
+    async def _topics(self, sections: list[_Section], style: str) -> _Topics | None:
+        """One point per story across channels, or None and the digest goes out by channel.
+
+        The grouping must keep, in its points, every post number the retellings cite and add no
+        other: a number it drops is a fact lost (and its post already counts as read), a number
+        it adds links a post nobody retold - a model slip or an instruction smuggled in through a
+        post. One retry names what went wrong; a second miss means by channel. A layout must
+        never cost the digest a fact."""
+        posts: list[Post] = []
+        labels: list[str] = []
+        numbered: list[tuple[str, str]] = []
+        sources: set[int] = set()
+        rest: list[_Section] = []
+        for s in sections:
+            text = renumber_refs(s.summary, len(posts), len(s.posts))
+            cited = cited_numbers(text)
+            if not cited:  # nothing to check it by, nothing to link: it keeps its own block
+                rest.append(s)
+                continue
+            numbered.append((s.channel.title, text))
+            sources |= cited
+            posts += s.posts
+            labels += [s.channel.title] * len(s.posts)
+        if len(numbered) < 2:
+            return None
+        note = ""
+        for _ in range(2):
+            try:
+                text = await self.llm.group_topics(numbered, style, note=note)
+                points = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+                cited = cited_numbers(points)
+            except Exception as exc:
+                logger.warning("grouping by topic failed: %s", exc)
+                return None
+            missing, extra = sorted(sources - cited), sorted(cited - sources)
+            if not missing and not extra:
+                return _Topics(text, posts, labels, rest)
+            note = "Your previous answer was rejected."
+            if missing:
+                note += " It dropped the facts cited as " + ", ".join(f"[{n}]" for n in missing) + "."
+            if extra:
+                note += " It cited numbers that are in no retelling: " + ", ".join(f"[{n}]" for n in extra) + "."
+            note += " Answer again: every number from the retellings must appear in a point, and no other number."
+        logger.warning("grouping by topic lost or invented citations twice; sending by channel")
+        return None
+
+    def export(self, result: DigestResult) -> Path | None:
+        """The delivered digest as a Markdown file in the export folder, if one is set.
+        A digest with no news ("nothing new", a group with nothing new) is not archived."""
+        if self.export_dir is None or not result.messages or result.channels_with_news == 0:
+            return None
+        when = (result.built_at or datetime.now(timezone.utc)).astimezone(self.tz)
+        try:
+            return export_digest(self.export_dir, result.messages, when, result.group_title)
+        except Exception as exc:  # the digest is already delivered: an archive problem must not stop the next group
+            logger.warning("could not export the digest: %s", exc)
+            return None
 
     async def commit(self, result: DigestResult, trigger: str, log: bool = True) -> None:
         """Move the read marks; log=False for a digest that was not sent (only stickers moved marks)."""
@@ -210,6 +310,7 @@ class DigestService:
         window_hours: int | None,
         now: datetime,
         group_title: str | None = None,
+        topics: _Topics | None = None,
     ) -> str:
         date = now.astimezone(self.tz).strftime("%d.%m.%Y")
         title = (
@@ -226,11 +327,38 @@ class DigestService:
             parts.append(t(self.lang, "digest_stats", channels=len(sections), posts=result.posts))
             if highlights:
                 parts += ["", t(self.lang, "highlights"), html.escape(highlights, quote=False)]
-            for s in sections:
+            if topics is not None:
+                parts += self._topic_blocks(topics)
+            for s in topics.rest if topics is not None else sections:
                 name = html.escape(s.channel.title, quote=False)
                 if s.channel.username:
                     name = f'<a href="https://t.me/{s.channel.username}">{name}</a>'
                 parts += ["", f"➡️ <b>{name}</b>", link_refs(s.summary, s.posts)]
+        if result.muted:
+            parts += ["", t(self.lang, "muted_posts", n=result.muted)]
         if result.errors:
             parts += ["", t(self.lang, "failed_channels", items=html.escape(", ".join(result.errors), quote=False))]
         return "\n".join(parts)
+
+    @staticmethod
+    def _topic_blocks(topics: _Topics) -> list[str]:
+        """"## title" lines become bold headings; the points under each get their links, labelled
+        by channel. A heading the model wrote is plain text: escaped, never trusted as HTML."""
+        parts: list[str] = []
+        body: list[str] = []
+
+        def flush() -> None:
+            if any(line.strip() for line in body):
+                parts.append(link_refs("\n".join(body), topics.posts, topics.labels))
+            body.clear()
+
+        for line in topics.text.splitlines():
+            if line.lstrip().startswith("#"):
+                flush()
+                heading = strip_refs(line.strip().lstrip("#"))
+                if heading:
+                    parts += ["", f"<b>{html.escape(heading, quote=False)}</b>"]
+            else:
+                body.append(line)
+        flush()
+        return parts

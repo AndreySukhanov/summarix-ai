@@ -705,6 +705,121 @@ for _lang, _strings in _SEARCH.items():
 for _lang, _strings in _GROUPS.items():
     TEXTS[_lang].update(_strings)
 
+# Layout by channel or by topic, and the word filter
+_LAYOUT = {
+    "ru": {
+        "settings_extra": "Раскладка: {layout}\nФильтр слов: {mute}",
+        "btn_layout": "🧩 Раскладка",
+        "btn_mute": "🔇 Фильтр слов",
+        "choose_layout": (
+            "Как раскладывать дайджест:\n\n"
+            "<b>По каналам</b> - каждый канал своим блоком.\n"
+            "<b>По темам</b> - одна история из нескольких каналов становится одним пунктом со ссылками на все посты."
+        ),
+        "layout_channels": "По каналам",
+        "layout_topics": "По темам",
+        "mute_none": "выключен",
+        "mute_hint": (
+            "Посты с этими словами не попадут в дайджест. Слово срабатывает с начала слова: "
+            "«крипт» уберёт и «криптовалюту».\n\n"
+            "<code>/mute реклама, розыгрыш, крипт</code> - задать список\n"
+            "<code>/mute off</code> - выключить"
+        ),
+        "muted_posts": "🔇 Пропущено фильтром: {n}",
+        "help_mute": "/mute слово, слово - пропускать посты с этими словами",
+    },
+    "en": {
+        "settings_extra": "Layout: {layout}\nWord filter: {mute}",
+        "btn_layout": "🧩 Layout",
+        "btn_mute": "🔇 Word filter",
+        "choose_layout": (
+            "How to lay out the digest:\n\n"
+            "<b>By channel</b> - each channel in its own block.\n"
+            "<b>By topic</b> - one story from several channels becomes one point with links to every post."
+        ),
+        "layout_channels": "By channel",
+        "layout_topics": "By topic",
+        "mute_none": "off",
+        "mute_hint": (
+            "Posts with these words stay out of the digest. A word matches at the start of a word: "
+            "«crypt» also mutes «cryptocurrency».\n\n"
+            "<code>/mute giveaway, promo, crypt</code> - set the list\n"
+            "<code>/mute off</code> - turn it off"
+        ),
+        "muted_posts": "🔇 Skipped by the filter: {n}",
+        "help_mute": "/mute word, word - skip posts with these words",
+    },
+    "es": {
+        "settings_extra": "Diseño: {layout}\nFiltro de palabras: {mute}",
+        "btn_layout": "🧩 Diseño",
+        "btn_mute": "🔇 Filtro de palabras",
+        "choose_layout": (
+            "Cómo organizar el resumen:\n\n"
+            "<b>Por canal</b> - cada canal en su propio bloque.\n"
+            "<b>Por tema</b> - una misma historia de varios canales se convierte en un solo punto con enlaces a todas las publicaciones."
+        ),
+        "layout_channels": "Por canal",
+        "layout_topics": "Por tema",
+        "mute_none": "desactivado",
+        "mute_hint": (
+            "Las publicaciones con estas palabras no entran en el resumen. La palabra coincide desde su inicio: "
+            "«cripto» también filtra «criptomoneda».\n\n"
+            "<code>/mute sorteo, promo, cripto</code> - fijar la lista\n"
+            "<code>/mute off</code> - desactivar"
+        ),
+        "muted_posts": "🔇 Omitidas por el filtro: {n}",
+        "help_mute": "/mute palabra, palabra - omitir publicaciones con estas palabras",
+    },
+    "fr": {
+        "settings_extra": "Mise en page : {layout}\nFiltre de mots : {mute}",
+        "btn_layout": "🧩 Mise en page",
+        "btn_mute": "🔇 Filtre de mots",
+        "choose_layout": (
+            "Comment organiser le résumé :\n\n"
+            "<b>Par chaîne</b> - chaque chaîne dans son propre bloc.\n"
+            "<b>Par sujet</b> - une même histoire venant de plusieurs chaînes devient un seul point avec des liens vers tous les posts."
+        ),
+        "layout_channels": "Par chaîne",
+        "layout_topics": "Par sujet",
+        "mute_none": "désactivé",
+        "mute_hint": (
+            "Les posts contenant ces mots n'entrent pas dans le résumé. Un mot correspond au début d'un mot : "
+            "«crypto» filtre aussi «cryptomonnaie».\n\n"
+            "<code>/mute concours, promo, crypto</code> - définir la liste\n"
+            "<code>/mute off</code> - désactiver"
+        ),
+        "muted_posts": "🔇 Ignorés par le filtre : {n}",
+        "help_mute": "/mute mot, mot - ignorer les posts contenant ces mots",
+    },
+    "kk": {
+        "settings_extra": "Орналасуы: {layout}\nСөз сүзгісі: {mute}",
+        "btn_layout": "🧩 Орналасуы",
+        "btn_mute": "🔇 Сөз сүзгісі",
+        "choose_layout": (
+            "Дайджестті қалай орналастыру керек:\n\n"
+            "<b>Арналар бойынша</b> - әр арна өз блогында.\n"
+            "<b>Тақырыптар бойынша</b> - бірнеше арнадағы бір оқиға барлық жазбаларға сілтемесі бар бір тармаққа айналады."
+        ),
+        "layout_channels": "Арналар бойынша",
+        "layout_topics": "Тақырыптар бойынша",
+        "mute_none": "өшірулі",
+        "mute_hint": (
+            "Осы сөздер бар жазбалар дайджестке кірмейді. Сөз басынан сәйкес келеді: "
+            "«крипт» «криптовалютаны» да алып тастайды.\n\n"
+            "<code>/mute жарнама, ұтыс, крипт</code> - тізімді орнату\n"
+            "<code>/mute off</code> - өшіру"
+        ),
+        "muted_posts": "🔇 Сүзгі өткізіп жіберді: {n}",
+        "help_mute": "/mute сөз, сөз - осы сөздер бар жазбаларды өткізіп жіберу",
+    },
+}
+
+for _lang, _strings in _LAYOUT.items():
+    TEXTS[_lang].update(_strings)
+    # the filter command joins the command list in /help, right before the schedule line
+    _head, _tail = TEXTS[_lang]["help"].rsplit("\n\n", 1)
+    TEXTS[_lang]["help"] = f"{_head}\n{_strings['help_mute']}\n\n{_tail}"
+
 UI_LANGUAGES = tuple(TEXTS)
 
 

@@ -101,6 +101,7 @@ async def send_digest(
                 await bot.send_message(chat_id, chunk, link_preview_options=NO_PREVIEW)
             sent.extend(result.messages)
             await service.commit(result, trigger)
+            service.export(result)  # after delivery, like the read marks; a "nothing new" reply is not archived
         if not sent:
             # no groups at all, or the asked group is gone (an old button): its own empty answer,
             # never a digest of every channel

@@ -42,4 +42,6 @@ class Settings(TelegramAccountSettings):
     max_posts_per_channel: int = Field(default=60, ge=1)
 
     database_url: str = "sqlite+aiosqlite:///data/summarix.db"
+    # Each delivered digest is also saved here as Markdown (an Obsidian vault, a notes folder). Empty: off.
+    digest_export_dir: str | None = None
     log_level: str = "INFO"

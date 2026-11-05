@@ -141,6 +141,23 @@ async def test_photos_only_where_the_picture_is_the_news_and_capped(tmp_path):
     assert (tmp_path / "1001_1.jpg").read_bytes() == b"\xff\xd8jpeg"
 
 
+async def test_muted_posts_never_reach_the_file_nor_cost_a_photo(tmp_path):
+    from utils.text import mute_pattern
+
+    reader = PhotoReader({
+        TECH.peer_id: [photo_post(TECH, 1, ""), photo_post(TECH, 2, "Giveaway: win a phone"), photo_post(TECH, 3, "news")],
+        MEMES.peer_id: [photo_post(MEMES, 7, "promo only")],
+    })
+    stats: dict = {}
+    sections, errors = await fetch_all(
+        reader, [TECH, MEMES], since=NOW - timedelta(hours=24), images_dir=tmp_path,
+        mute=mute_pattern(["giveaway", "promo"]), stats=stats,
+    )
+
+    assert [p.message_id for p in sections[0].posts] == [1, 3] and len(sections) == 1  # MEMES had only promo
+    assert (TECH.peer_id, 2) not in reader.downloads and stats == {"muted": 2} and errors == []
+
+
 def test_render_numbers_posts_links_them_and_lists_failures(tmp_path):
     long_text = "x" * 2500
     sections = [

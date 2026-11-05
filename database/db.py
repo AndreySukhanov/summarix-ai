@@ -29,6 +29,10 @@ async def init_models(engine: AsyncEngine) -> None:
         columns = {row[1] for row in (await conn.exec_driver_sql("PRAGMA table_info(settings)")).fetchall()}
         if "ui_language" not in columns:
             await conn.exec_driver_sql("ALTER TABLE settings ADD COLUMN ui_language VARCHAR(8) NOT NULL DEFAULT 'ru'")
+        if "layout" not in columns:
+            await conn.exec_driver_sql("ALTER TABLE settings ADD COLUMN layout VARCHAR(16) NOT NULL DEFAULT 'channels'")
+        if "mute_words" not in columns:
+            await conn.exec_driver_sql("ALTER TABLE settings ADD COLUMN mute_words TEXT")
     # channels added before groups existed go to the manual group
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as db:

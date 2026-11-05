@@ -47,6 +47,22 @@ Format: exactly 3 lines in {language}, each starts with "• " and one emoji tha
 STYLE - stay in character:
 {style}"""
 
+# A digest by topic: the channel retellings above it cite post numbers unique across the issue,
+# so a merged point can keep every channel's source and the code still builds every link.
+TOPICS_TASK = """
+
+Above are the retellings of several Telegram channels for one digest. Every fact cites its source posts as numbers in square brackets, e.g. [12]; the numbers are unique across all channels.
+
+Regroup them by topic for a reader who wants each story once:
+- When several channels report the same story, merge them into ONE point and keep the numbers of every channel's post, e.g. [3][17]. This is the main job: no story appears twice.
+- Put the points under 2 to {max_topics} topics. Each topic starts with a line "## " + one emoji + a short topic name of 2-5 words. Under it, points that start with "• ".
+- Order topics and points by importance, most important first.
+- Keep every fact and every number from the retellings; drop only true repeats. Never invent a number, never write links, never add facts.
+- Write in {language} only. Plain text apart from the "## " lines, no other Markdown.
+
+STYLE - stay in character:
+{style}"""
+
 # Channels are summarized in separate calls that cannot see each other, so "don't repeat yourself"
 # alone does not stop every channel opening with the same trick. Rotating the opening makes the
 # variety mechanical.
@@ -228,6 +244,27 @@ class LLM:
                 {"role": "user", "content": user + HIGHLIGHTS_TASK.format(language=self.language, style=style)},
             ],
         )
+
+    async def group_topics(
+        self, sections: list[tuple[str, str]], style: str, max_topics: int = 7, note: str = ""
+    ) -> str:
+        """Channel retellings whose [n] are unique across the issue -> the same facts grouped by
+        topic, one point per story however many channels told it. `note`: why the last answer
+        was rejected, so the retry fixes exactly that."""
+        user = "\n\n".join(f"### Channel: {title}\n{summary}" for title, summary in sections)
+        text = await self._chat(
+            self.model,
+            [
+                {"role": "system", "content": SUMMARY_SYSTEM},
+                {
+                    "role": "user",
+                    "content": user
+                    + TOPICS_TASK.format(language=self.language, style=style, max_topics=max_topics)
+                    + (f"\n\n{note}" if note else ""),
+                },
+            ],
+        )
+        return strip_disclaimer(text)
 
     async def _chat(self, model: str, messages: list[dict]) -> str:
         response = await self.client.chat.completions.create(model=model, messages=messages)

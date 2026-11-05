@@ -3,6 +3,7 @@ Wiring: settings -> SQLite -> Telethon (owner's account) -> model -> bot + daily
 """
 import asyncio
 import logging
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -66,6 +67,7 @@ async def main() -> None:
         describe_images=settings.describe_images,
         max_images_per_run=settings.max_images_per_run,
         defaults=defaults,
+        export_dir=Path(settings.digest_export_dir) if settings.digest_export_dir else None,
     )
 
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode="HTML"))

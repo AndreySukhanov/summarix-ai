@@ -13,6 +13,12 @@ TELEGRAM_LIMIT = 4096
 
 _REF_RUN = re.compile(r"(?:\s*\[\s*\d+(?:\s*,\s*\d+)*\s*\])+")
 _NUM = re.compile(r"\d+")
+MAX_REF_DIGITS = 6  # no issue has a million posts; a 5000-digit "number" must not reach int()
+
+
+def _numbers(run: str) -> list[int]:
+    """The post numbers of one citation run, in order; absurdly long digit strings are ignored."""
+    return [int(x) for x in _NUM.findall(run) if len(x) <= MAX_REF_DIGITS]
 
 
 def one_line(value: object, limit: int = 300) -> str:
@@ -21,21 +27,69 @@ def one_line(value: object, limit: int = 300) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def link_refs(summary: str, posts: list[Post]) -> str:
-    """Escape model text for HTML and replace [n] citations with links to the posts."""
+def link_refs(summary: str, posts: list[Post], labels: list[str] | None = None) -> str:
+    """Escape model text for HTML and replace [n] citations with links to the posts.
+    labels[n-1], when given, is the link's text instead of the number (the channel name in a
+    digest by topic, where one point can cite several channels)."""
     escaped = html.escape(summary, quote=False)
     seen: set[int] = set()  # a post already linked is not linked again: "(1) ... (1) ... (1)" is noise
 
     def replace(match: re.Match) -> str:
         links = []
-        for n in dict.fromkeys(int(x) for x in _NUM.findall(match.group(0))):
+        used: dict[str, int] = {}  # two posts of one channel in one point: "Tech, Tech 2"
+        for n in dict.fromkeys(_numbers(match.group(0))):
             if 1 <= n <= len(posts) and n not in seen:
                 seen.add(n)
-                links.append(f'<a href="{html.escape(posts[n - 1].link)}">{n}</a>')
+                if labels:
+                    label = labels[n - 1]
+                    used[label] = used.get(label, 0) + 1
+                    text = html.escape(label if used[label] == 1 else f"{label} {used[label]}", quote=False)
+                else:
+                    text = str(n)
+                links.append(f'<a href="{html.escape(posts[n - 1].link)}">{text}</a>')
         return f" ({', '.join(links)})" if links else ""
 
     linked = _REF_RUN.sub(replace, escaped)
     return re.sub(r"\n[ \t​]*(?:\n[ \t​]*)+", "\n\n", linked).strip()  # at most one blank line
+
+
+def renumber_refs(summary: str, offset: int, count: int) -> str:
+    """A channel's [k] citations (1..count) as numbers across the whole issue: [offset + k].
+    A number outside 1..count was never a post of this channel and is dropped."""
+
+    def replace(match: re.Match) -> str:
+        run = match.group(0)
+        valid = [n for n in _numbers(run) if 1 <= n <= count]
+        if not valid:
+            return ""
+        lead = run[: len(run) - len(run.lstrip())]  # the run swallows the space before it: keep it
+        return lead + "".join(f"[{offset + n}]" for n in dict.fromkeys(valid))
+
+    return _REF_RUN.sub(replace, summary)
+
+
+def cited_numbers(text: str) -> set[int]:
+    """Every post number the text cites in [n] form."""
+    return {n for run in _REF_RUN.findall(text) for n in _numbers(run)}
+
+
+def strip_refs(text: str) -> str:
+    """The text without its [n] citations (a heading is no place for a link)."""
+    return _REF_RUN.sub("", text).strip()
+
+
+def parse_words(raw: str | None) -> list[str]:
+    """Filter words as typed: comma- or line-separated, trimmed, case kept for display, no repeats."""
+    words = [w.strip() for w in re.split(r"[,\n]", raw or "")]
+    return list(dict.fromkeys(w for w in words if w))[:50]
+
+
+def mute_pattern(words: list[str]) -> re.Pattern | None:
+    """Matches a post that has any of the words at the start of a word, any case: «крипт»
+    mutes «криптовалюта» and «Крипта», but not «скрипт»."""
+    if not words:
+        return None
+    return re.compile(r"(?<!\w)(?:" + "|".join(re.escape(w) for w in words) + ")", re.I)
 
 
 def split_message(text: str, limit: int = TELEGRAM_LIMIT) -> list[str]:

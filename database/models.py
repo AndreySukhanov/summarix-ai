@@ -61,6 +61,8 @@ class BotSettings(Base):
     digest_time: Mapped[str] = mapped_column(String(5))
     timezone: Mapped[str] = mapped_column(String(64))
     custom_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    layout: Mapped[str] = mapped_column(String(16), default="channels")  # "channels" | "topics"
+    mute_words: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated; posts with them are skipped
 
 
 class DigestRun(Base):

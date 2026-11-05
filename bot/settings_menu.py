@@ -1,6 +1,7 @@
 """
-/settings: style, digest language, interface language, time, timezone, custom prompt.
-Everything is a button; free input is a command: /time 08:30, /tz Europe/Astrakhan, /prompt ...
+/settings: style, digest language, interface language, time, timezone, custom prompt, layout
+(by channel or by topic), word filter.
+Everything is a button; free input is a command: /time 08:30, /tz Europe/Astrakhan, /prompt ..., /mute ...
 """
 import asyncio
 import html
@@ -16,9 +17,21 @@ from bot.keyboards import TIME_PRESETS, button_texts, grid, main_menu
 from bot.texts import UI_LANGUAGES, t
 from database.db import SessionMaker, get_settings, update_settings
 from services.styles import LANGUAGES, STYLES, TIMEZONE_PRESETS, style_title
+from utils.text import parse_words
 
 _TIME = re.compile(r"^([01]?\d|2[0-3])[:.]([0-5]\d)$")
 MAX_PROMPT_CHARS = 1500
+LAYOUTS = ("channels", "topics")
+MAX_MUTE_WORD_CHARS = 40
+OFF_WORDS = ("off", "выкл", "сброс")
+
+
+def mute_value(raw: str) -> str | None:
+    """What /mute stores: the words joined by ", ", or None to switch the filter off."""
+    if raw.strip().lower() in OFF_WORDS:
+        return None
+    words = [w for w in parse_words(raw) if len(w) <= MAX_MUTE_WORD_CHARS]
+    return ", ".join(words) or None
 
 
 def parse_time(raw: str) -> str | None:
@@ -63,12 +76,16 @@ def build_settings_router(*, sessions: SessionMaker, defaults: dict, wake: async
             time=s.digest_time,
             tz=f"{s.timezone} ({utc_offset(s.timezone)})",
         )
+        layout = t(lang, "layout_topics" if s.layout == "topics" else "layout_channels")
+        mute = html.escape(s.mute_words) if s.mute_words else t(lang, "mute_none")
+        text += "\n" + t(lang, "settings_extra", layout=layout, mute=mute)
         b = lambda key, data: InlineKeyboardButton(text=t(lang, key), callback_data=data)  # noqa: E731
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [b("btn_style", "set:style"), b("btn_prompt", "set:prompt")],
                 [b("btn_language", "set:lang"), b("btn_ui_language", "set:ui")],
                 [b("btn_time", "set:time"), b("btn_tz", "set:tz")],
+                [b("btn_layout", "set:layout"), b("btn_mute", "set:mute")],
             ]
         )
         return text, kb
@@ -191,6 +208,39 @@ def build_settings_router(*, sessions: SessionMaker, defaults: dict, wake: async
         await save(timezone=name)
         await show_main(message, lang)
 
+    # layout: by channel or by topic
+    @router.callback_query(F.data == "set:layout")
+    async def cb_layouts(call: CallbackQuery, lang: str) -> None:
+        buttons = [InlineKeyboardButton(text=t(lang, f"layout_{k}"), callback_data=f"layout:{k}") for k in LAYOUTS]
+        await picker(call, lang, "choose_layout", buttons, 2)
+
+    @router.callback_query(F.data.startswith("layout:"))
+    async def cb_layout(call: CallbackQuery, lang: str) -> None:
+        key = call.data.split(":", 1)[1]
+        if key in LAYOUTS:
+            await save(layout=key)
+        await show_main(call, lang)
+
+    # word filter
+    @router.callback_query(F.data == "set:mute")
+    async def cb_mute(call: CallbackQuery, lang: str) -> None:
+        async with sessions() as db:
+            current = (await get_settings(db, defaults)).mute_words
+        text = t(lang, "mute_hint")
+        if current:
+            text += f"\n\n<i>{html.escape(current)}</i>"
+        await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[back(lang)]))
+        await call.answer()
+
+    @router.message(Command("mute"))
+    async def cmd_mute(message: Message, command: CommandObject, lang: str) -> None:
+        raw = (command.args or "").strip()
+        if not raw:
+            await message.answer(t(lang, "mute_hint"))
+            return
+        await save(mute_words=mute_value(raw))
+        await show_main(message, lang)
+
     # custom prompt
     @router.callback_query(F.data == "set:prompt")
     async def cb_prompt(call: CallbackQuery, lang: str) -> None:
@@ -208,7 +258,7 @@ def build_settings_router(*, sessions: SessionMaker, defaults: dict, wake: async
         if not text:
             await message.answer(t(lang, "prompt_hint"))
             return
-        if text.lower() in ("off", "выкл", "сброс"):
+        if text.lower() in OFF_WORDS:
             await save(custom_prompt=None)
         else:
             await save(custom_prompt=text[:MAX_PROMPT_CHARS])
