@@ -10,6 +10,7 @@ Key facts:
 - Images in posts are captioned by a vision model with a per-run cost cap; read marks move only after delivery, so nothing is lost on failure.
 - Works with any OpenAI-compatible API (OpenAI, OpenRouter, DeepSeek, Qwen or a local model). The Claude Code skill and the MCP server need no model key: the client's model writes the digest.
 - MCP server tools: fetch_posts, read_part, search_posts, find_channels, list_channels, add_channels, remove_channels, list_styles.
+- Optional mod `summarix-panel` (Claude Code 2.1.287+, `/plugin install summarix-panel@summarix-telegram`): the digest in a pane beside the chat, links kept, the last 10 digests paged across sessions, a new digest for 24 h / 3 days / a week in one press.
 - Python 3.13, aiogram 3, Telethon, SQLite, Docker; 140 offline tests; Source-Available license.
 
 ## Docs

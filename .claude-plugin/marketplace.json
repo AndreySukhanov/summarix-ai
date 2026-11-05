@@ -9,6 +9,11 @@
       "name": "summarix-telegram",
       "source": "./",
       "description": "Digest of your Telegram channels inside Claude Code: posts from your own channel list retold with a link to every post, in 13 styles, plus channel search and discovery."
+    },
+    {
+      "name": "summarix-panel",
+      "source": "./mods/summarix-panel",
+      "description": "Your Telegram channel digest in a pane beside the chat: every point linked to its post, earlier digests a click away, a new one in one press. Needs Claude Code 2.1.287+."
     }
   ],
   "metadata": {

@@ -1,0 +1,20 @@
+{
+  "name": "summarix-panel",
+  "version": "0.1.0",
+  "description": "Your Telegram channel digest in a pane beside the chat: every point linked to its post, earlier digests a click away, a new one in one press. Needs Claude Code 2.1.287+.",
+  "author": {
+    "name": "Andrey Sukhanov",
+    "url": "https://github.com/AndreySukhanov"
+  },
+  "repository": "https://github.com/AndreySukhanov/summarix-telegram",
+  "homepage": "https://github.com/AndreySukhanov/summarix-telegram/tree/main/mods/summarix-panel",
+  "license": "LicenseRef-Source-Available",
+  "keywords": [
+    "mod",
+    "panel",
+    "claude-code",
+    "telegram",
+    "digest"
+  ],
+  "types": "./types/index.d.ts"
+}

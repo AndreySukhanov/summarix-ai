@@ -54,7 +54,7 @@ If the `summarix-telegram` MCP server is connected (`scripts/mcp_server.py`), it
    - **0 posts** -> say the channels were quiet. No helper.
 4. **Retell.** One helper agent per file, using the template below; several parts - one helper per `posts_partK.md`, all launched in one message.
 5. **Assemble.** One part - the helper's answer is the digest. Several - join the channel sections in order and build **Highlights** yourself from the candidates of all parts; drop repeats between parts.
-6. **Deliver.** The whole digest in the chat, and the same text saved to `DATA/last_digest.md`.
+6. **Deliver.** The whole digest in the chat, and the same text saved to `DATA/last_digest.md`. If the tool `mcp__summarix-panel__show_digest` is available (the optional Summarix panel mod), also call it once with the same Markdown and a short `title` ("Last 24 hours, 12 channels"), so the digest shows in the pane beside the chat.
 
 Follow-ups ("expand point 3", "what exactly did channel X say") come from `DATA/posts_latest.md` - grep the section and answer with links. Another period or style - a new `fetch`.
 

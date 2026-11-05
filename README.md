@@ -242,6 +242,16 @@ The skill works on your clone of this repo: set `SUMMARIX_HOME` to it (or tell C
 
 It has its own Telegram session and its own channel list, and it only reads a recent window — it never moves the bot's read marks. **Run the bot and the plugin side by side; nothing collides.**
 
+### 🪟 The digest beside the chat (optional mod)
+
+On Claude Code 2.1.287 or later, one more install gives the digest a pane of its own:
+
+```
+/plugin install summarix-panel@summarix-telegram
+```
+
+When the skill finishes a digest, Claude also puts it in the pane - every point still linked to its post. **< Older / Newer >** page through the last 10 digests, kept across sessions; **24 h / 3 days / Week** ask for a new one in one press; `/summarix-panel` opens the pane at any time. The mod needs no keys and reads nothing from Telegram itself. Details: [`mods/summarix-panel`](mods/summarix-panel).
+
 <details>
 <summary><b>Script commands behind the skill</b></summary>
 
