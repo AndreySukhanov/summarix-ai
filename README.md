@@ -40,16 +40,18 @@ Summary bots promise to fix this and run into the same walls: they cannot read p
 
 ## 🔥 Why it wins
 
-| | Scrolling, or a typical summary bot | **Summarix** |
+| | Scrolling, or a typical digest tool | **Summarix** |
 |---|---|---|
-| **Private channels** | A bot cannot join them | **Reads through your own account** (Telethon) — private channels and albums work |
-| **Trust** | "Trust me" summaries | **Every bullet cites post numbers**; the bot turns them into links, so a made-up URL cannot appear |
-| **Images and charts** | Skipped | **Captioned by a vision model** — including posts that are only a picture — with a per-run cost cap |
-| **Failures** | A crash loses a day of posts | **Read marks move only after delivery**; a broken channel is listed, not fatal |
-| **Voice** | One bland tone | **13 styles** plus your own prompt, summaries in **5 languages** |
-| **Organization** | One endless list | **Groups** from your Telegram folders, with a separate digest per group |
-| **Discovery** | — | **`/search`** across your channels with query expansion; **`/find`** live new channels with real stats |
-| **Cost and data** | Your feed on someone else's server | **Self-hosted**: SQLite with names and read marks only, any OpenAI-compatible model — or a local one |
+| **One story, five channels** | The same news five times, once per channel | **By topic**: one point linked to every channel's post — and the code rejects a grouping that drops a cited fact or adds a post |
+| **Trust** | The model writes the links, or there is one link per channel | **Every bullet cites post numbers and the code builds the links**, so a made-up URL cannot appear |
+| **Images and charts** | Skipped, or a `[photo]` placeholder | **Captioned by a vision model** — including posts that are only a picture — with a per-run cost cap |
+| **Failures** | A fixed time window: a failed or late run lets posts slip through | **Read marks move only after delivery**; a backlog arrives oldest first, a broken channel is listed, not fatal |
+| **Noise** | Every giveaway and promo, retold | **`/mute giveaway, crypt`** — muted posts never reach the model and cost nothing |
+| **Voice** | One neutral tone | **13 styles** plus your own prompt, summaries in **5 languages** |
+| **Discovery** | Only the channels you already know | **`/find`** live new channels with subscribers, posts a month and share on the topic; **`/search`** across your channels with query expansion |
+| **Private channels** | Hosted digest bots: public ones, private only on paid plans | **Reads through your own account** (Telethon) — private channels and albums, free |
+| **Where it runs** | A bot, or a script | **One engine, four ways**: Telegram bot, Claude Code plugin with an optional panel, MCP server, CLI — a ready Docker image or `pipx` |
+| **Cost and data** | Your feed on someone else's server | **Self-hosted**: SQLite with names and read marks only, any OpenAI-compatible model or a local one; every digest can land in your Obsidian vault as Markdown |
 
 ---
 
