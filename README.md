@@ -18,7 +18,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 [![License](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
 
-[Quick Start](#-quick-start) · [What you get](#-what-you-get) · [How It Works](#️-how-it-works) · [Features](#-features) · [Commands](#-commands) · [Claude Code plugin](#-claude-code-plugin) · [Privacy](#-privacy-and-security)
+[Quick Start](#-quick-start) · [What you get](#-what-you-get) · [How It Works](#️-how-it-works) · [Features](#-features) · [Commands](#-commands) · [Claude Code plugin](#-claude-code-plugin) · [MCP server](#-mcp-server) · [Privacy](#-privacy-and-security)
 
 </div>
 
@@ -130,7 +130,8 @@ every day at DIGEST_TIME                      /digest, /digest 48
 | ⏰ | **Daily schedule** | Your time and timezone, set from `/settings`; no Celery, no Redis |
 | 🧱 | **Never loses posts** | Read marks only after delivery; a backlog over the per-channel limit arrives oldest first over the next digests |
 | 🔐 | **Owner only** | Every update from anyone but `OWNER_ID` is dropped before any handler runs |
-| 🤖 | **Claude Code plugin** | Two commands install the `tgdigest` skill: your channels retold right in Claude Code, with its own session and channel list, so the bot's digest misses nothing |
+| 🤖 | **Claude Code plugin** | Two commands install the `summarix-telegram` skill: your channels retold right in Claude Code, with its own session and channel list, so the bot's digest misses nothing |
+| 🔌 | **MCP server** | `scripts/mcp_server.py`: the same collector as eight tools for any MCP client — Claude Desktop, Cursor, Claude Code |
 
 ---
 
@@ -205,14 +206,14 @@ All optional, in `.env`. Time, timezone and languages are starting values — ch
 
 ## 🤖 Claude Code plugin
 
-Read your channels without leaving the terminal. Summarix ships as a Claude Code plugin with a `tgdigest` skill: ask in plain words — "digest of my channels for 3 days", "roast style, last week", "what did my channels say about smart glasses", "find channels about AI agents" — and Claude collects the posts, retells them with a link to every post and answers follow-ups.
+Read your channels without leaving the terminal. Summarix ships as a Claude Code plugin with a `summarix-telegram` skill: ask in plain words — "digest of my channels for 3 days", "roast style, last week", "what did my channels say about smart glasses", "find channels about AI agents" — and Claude collects the posts, retells them with a link to every post and answers follow-ups.
 
 ```
 /plugin marketplace add AndreySukhanov/summarix-telegram
-/plugin install summarix@summarix
+/plugin install summarix-telegram@summarix-telegram
 ```
 
-Prefer a plain skill without the plugin? Copy `skills/tgdigest` into `~/.claude/skills/` - it is the same file.
+Prefer a plain skill without the plugin? Copy `skills/summarix-telegram` into `~/.claude/skills/` - it is the same file.
 
 The skill works on your clone of this repo: set `SUMMARIX_HOME` to it (or tell Claude once where it is), put `TG_API_ID` / `TG_API_HASH` in `.env`, and run the one-time login in your own terminal — `python scripts/tgdigest.py login`. No model key needed: Claude writes the digest itself, in any of the 13 styles.
 
@@ -231,6 +232,43 @@ python scripts/tgdigest.py styles
 ```
 
 </details>
+
+## 🔌 MCP server
+
+Not on Claude Code? The same collector runs as an MCP server, so any MCP client — Claude Desktop, Cursor, Claude Code — gets your channels as tools. The client's model writes the digest; the server needs no model key.
+
+```bash
+# Claude Code
+claude mcp add summarix-telegram -- /path/to/summarix-telegram/.venv/bin/python /path/to/summarix-telegram/scripts/mcp_server.py
+```
+
+Claude Desktop, in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "summarix-telegram": {
+      "command": "/path/to/summarix-telegram/.venv/bin/python",
+      "args": ["/path/to/summarix-telegram/scripts/mcp_server.py"]
+    }
+  }
+}
+```
+
+On Windows the interpreter is `.venv\Scripts\python.exe`.
+
+| Tool | What it does |
+|---|---|
+| `fetch_posts` | Posts of the last N hours from your list, with a style; a big issue comes in parts |
+| `read_part` | The next part of the last fetch or search — without collecting again |
+| `search_posts` | What your channels wrote about a topic |
+| `find_channels` | Live new channels on a topic, with real stats |
+| `list_channels` · `add_channels` · `remove_channels` | Manage the list; Telegram folders stay in sync |
+| `list_styles` | The 13 styles |
+
+It shares the session and the channel list with the skill. Log in once in your own terminal with `python scripts/tgdigest.py login` — the login never goes through MCP. Every result with posts is marked as untrusted content: a post is data, not instructions.
+
+**One server, any MCP client, your channels.**
 
 ---
 
@@ -275,7 +313,8 @@ database/           channels, groups, digest runs, settings
 scripts/
   login.py          one-time account login
   tgdigest.py       collector behind the Claude Code skill
-skills/tgdigest/    the Claude Code skill
+  mcp_server.py     MCP server: the collector as tools
+skills/summarix-telegram/  the Claude Code skill
 .claude-plugin/     plugin and marketplace manifests
 utils/text.py       citations → links, safe HTML, splitting at 4096 chars
 tests/              offline: fake Telegram reader and fake model
@@ -292,7 +331,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-**107 tests, no network**: link and folder parsing, album grouping, citation linking and HTML escaping, message splitting, schedule in local time, read marks only after commit, recap windows, image cost cap, broken channels, groups, search and discovery, settings, the tgdigest companion, owner-only access. CI runs them with a flake8 pass on every push to main.
+**118 tests, no network**: link and folder parsing, album grouping, citation linking and HTML escaping, message splitting, schedule in local time, read marks only after commit, recap windows, image cost cap, broken channels, groups, search and discovery, settings, the tgdigest companion, the MCP server (tools, parts, clean stdout), owner-only access. CI runs them with a flake8 pass on every push to main.
 
 ---
 
