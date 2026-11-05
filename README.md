@@ -18,7 +18,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 [![License](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
 
-[Quick Start](#-quick-start) · [What you get](#-what-you-get) · [How It Works](#️-how-it-works) · [Features](#-features) · [Commands](#-commands) · [Claude Code plugin](#-claude-code-plugin) · [MCP server](#-mcp-server) · [Privacy](#-privacy-and-security)
+[Quick Start](#-quick-start) · [Three ways](#-three-ways-to-use-it) · [What you get](#-what-you-get) · [How It Works](#️-how-it-works) · [Features](#-features) · [Commands](#-commands) · [Claude Code plugin](#-claude-code-plugin) · [MCP server](#-mcp-server) · [Privacy](#-privacy-and-security)
 
 </div>
 
@@ -132,6 +132,25 @@ every day at DIGEST_TIME                      /digest, /digest 48
 | 🔐 | **Owner only** | Every update from anyone but `OWNER_ID` is dropped before any handler runs |
 | 🤖 | **Claude Code plugin** | Two commands install the `summarix-telegram` skill: your channels retold right in Claude Code, with its own session and channel list, so the bot's digest misses nothing |
 | 🔌 | **MCP server** | `scripts/mcp_server.py`: the same collector as eight tools for any MCP client — Claude Desktop, Cursor, Claude Code |
+
+---
+
+## 🧭 Three ways to use it
+
+One engine underneath — Summarix reads your channels through your own account with Telethon. The three ways differ in who writes the retelling and where you read it.
+
+| | Bot | Claude Code skill | MCP server |
+|---|---|---|---|
+| **Where you read** | A chat with your bot in Telegram | Claude Code | Any MCP client — Claude Desktop, Cursor, Claude Code |
+| **Who writes the retelling** | The bot, with a model on your key (`LLM_API_KEY`) | Claude — no model key | The client's model — no model key |
+| **When** | On its own, every day at your time, plus `/digest` | When you ask in plain words: "digest for 3 days" | When the client calls `fetch_posts`, `search_posts`… |
+| **Read marks** | Moves them: the next digest starts where this one ended | Untouched — reads a window of N hours | Untouched, like the skill |
+| **Setup** | Docker or `python run_bot.py`, a bot token, `OWNER_ID` | Two `/plugin` commands | One `claude mcp add`, or a few lines in Claude Desktop's config |
+| **Best for** | Getting the digest without opening anything | Working in Claude Code: "what's new", follow-ups on the spot | Another client, or tools of your own |
+
+Under the skill and the MCP server sits `scripts/tgdigest.py` — a CLI you can also run yourself. The bot has its own session and channel list; the skill and the MCP server share one, one process at a time, guarded by an OS file lock.
+
+**Run all three: the bot sends the morning digest, and Claude answers "what did my channels say about smart glasses this month".**
 
 ---
 
@@ -266,7 +285,7 @@ On Windows the interpreter is `.venv\Scripts\python.exe`.
 | `list_channels` · `add_channels` · `remove_channels` | Manage the list; Telegram folders stay in sync |
 | `list_styles` | The 13 styles |
 
-It shares the session and the channel list with the skill. Log in once in your own terminal with `python scripts/tgdigest.py login` — the login never goes through MCP. Every result with posts is marked as untrusted content: a post is data, not instructions.
+It shares the session and the channel list with the skill - one process at a time, guarded by an OS file lock. Log in once in your own terminal with `python scripts/tgdigest.py login` — the login never goes through MCP. Every result with posts is marked as untrusted content: a post is data, not instructions.
 
 **One server, any MCP client, your channels.**
 
@@ -331,7 +350,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-**118 tests, no network**: link and folder parsing, album grouping, citation linking and HTML escaping, message splitting, schedule in local time, read marks only after commit, recap windows, image cost cap, broken channels, groups, search and discovery, settings, the tgdigest companion, the MCP server (tools, parts, clean stdout), owner-only access. CI runs them with a flake8 pass on every push to main.
+**137 tests, no network**: link and folder parsing, album grouping, citation linking and HTML escaping, message splitting, schedule in local time, read marks only after commit, recap windows, image cost cap, broken channels, groups, search and discovery, settings, the tgdigest companion, the MCP server (schemas and bounds, parts that fit, no stale results, locks that survive cancellation, safe errors, an isolated protocol stream), owner-only access. CI runs them with a flake8 pass on every push to main.
 
 ---
 
