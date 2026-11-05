@@ -6,6 +6,10 @@
 
 ### Your Telegram channels, read for you — one short digest a day, every point linked to its post.
 
+**English** | [Русский](README.ru.md)
+
+**Summarix is a self-hosted Telegram channel summarizer**: a Telegram bot, a Claude Code plugin and an MCP server that summarize the Telegram channels you follow with AI — private channels included — into one short digest, with a link to every post.
+
 **Not "another summary bot."** Summarix reads the channels you follow through *your own* account — private channels and albums included — captions the images, summarizes each channel in a few cited bullets, picks the day's highlights, and sends you one message. Every point links back to the post it came from, and a model-invented URL cannot appear.
 
 **Your channels → new posts → image captions → 2-6 cited bullets per channel → top highlights → one message. Self-hosted. A few cents a day.**
@@ -18,7 +22,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 [![License](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
 
-[Quick Start](#-quick-start) · [Three ways](#-three-ways-to-use-it) · [What you get](#-what-you-get) · [How It Works](#️-how-it-works) · [Features](#-features) · [Commands](#-commands) · [Claude Code plugin](#-claude-code-plugin) · [MCP server](#-mcp-server) · [Privacy](#-privacy-and-security)
+[Quick Start](#-quick-start) · [Three ways](#-three-ways-to-use-it) · [What you get](#-what-you-get) · [How It Works](#️-how-it-works) · [Features](#-features) · [Commands](#-commands) · [Claude Code plugin](#-claude-code-plugin) · [MCP server](#-mcp-server) · [FAQ](#-faq) · [Privacy](#-privacy-and-security)
 
 </div>
 
@@ -351,6 +355,35 @@ pytest
 ```
 
 **140 tests, no network**: link and folder parsing, album grouping, citation linking and HTML escaping, message splitting, schedule in local time, read marks only after commit, recap windows, image cost cap, broken channels, groups, search and discovery, settings, the tgdigest companion, the MCP server (schemas and bounds, parts that fit, no stale results, locks that survive cancellation, safe errors, an isolated protocol stream), owner-only access. CI runs them with a flake8 pass on every push to main.
+
+## ❓ FAQ
+
+### How do I summarize Telegram channels with AI?
+Run Summarix: add the channels you follow (`/add`, or a Telegram folder link) and the bot sends one digest a day — 2-6 bullets per channel, the day's highlights first, every bullet linked to its post. `/digest` gives one on demand.
+
+### Can it summarize private Telegram channels?
+Yes. It reads through your own Telegram account (Telethon), so any channel you have joined works, private ones included. A regular bot cannot do that on its own.
+
+### Is there an MCP server for Telegram channels?
+Yes — `scripts/mcp_server.py` gives any MCP client (Claude Desktop, Cursor, Claude Code) your channels as eight tools: fetch posts, read further parts, search, find new channels, manage the list. See [MCP server](#-mcp-server).
+
+### Can I use it in Claude Code?
+Yes — install the `summarix-telegram` plugin with two `/plugin` commands and ask in plain words: "digest of my channels for 3 days". See [Claude Code plugin](#-claude-code-plugin).
+
+### Do I need an OpenAI API key?
+For the bot, yes — any OpenAI-compatible API works: OpenAI, OpenRouter, DeepSeek, Qwen, or a local model behind `LLM_BASE_URL`. The Claude Code skill and the MCP server need no model key: the client's model writes the digest.
+
+### Does it post, join or leave channels on my behalf?
+No. The account is used read-only, and the bot answers only its owner (`OWNER_ID`).
+
+### What does it cost?
+Running it for yourself costs only model tokens — about 40 calls a day for twenty channels, usually a few cents on a small model. The code is Source-Available: free to read, run and learn from.
+
+### Which languages does it support?
+Summaries in Russian, English, Spanish, French and Kazakh, whatever language the channels write in; the bot interface speaks the same five.
+
+### What does it store?
+A local SQLite file with channel names, groups and read marks. Post contents are not stored.
 
 ---
 
