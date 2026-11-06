@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.AndreySukhanov/summarix-telegram -->
 <div align="center">
 
 <img src="assets/banner.png" alt="Summarix — a personal Telegram channel digest" width="100%"/>
@@ -304,6 +305,20 @@ Installed with `pipx install summarix-telegram`? Then the server is one command,
 
 ```bash
 claude mcp add summarix-telegram -e SUMMARIX_HOME=/path/to/folder -- summarix-mcp
+```
+
+From the [MCP Registry](https://registry.modelcontextprotocol.io) (`io.github.AndreySukhanov/summarix-telegram`): a client that runs local stdio servers starts it with `uvx` — install [uv](https://docs.astral.sh/uv/) once, the rest is fetched on first run. Log in once with `uvx --from summarix-telegram tgdigest login` and the same `SUMMARIX_HOME`:
+
+```json
+{
+  "mcpServers": {
+    "summarix-telegram": {
+      "command": "uvx",
+      "args": ["summarix-telegram"],
+      "env": { "SUMMARIX_HOME": "/path/to/folder" }
+    }
+  }
+}
 ```
 
 | Tool | What it does |

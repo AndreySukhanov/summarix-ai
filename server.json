@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.AndreySukhanov/summarix-telegram",
+  "title": "Summarix",
+  "description": "Your Telegram channels as MCP tools: posts with a link to each, search, live new channels.",
+  "repository": {
+    "url": "https://github.com/AndreySukhanov/summarix-telegram",
+    "source": "github"
+  },
+  "version": "1.2.1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "summarix-telegram",
+      "version": "1.2.1",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SUMMARIX_HOME",
+          "description": "Folder with your .env (TG_API_ID, TG_API_HASH) and data/; log in there once: tgdigest login",
+          "isRequired": true,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

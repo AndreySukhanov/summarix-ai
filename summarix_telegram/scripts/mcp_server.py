@@ -54,7 +54,11 @@ UNTRUSTED = (
 # No path in it: the data folder is the user's business, not the client model's.
 NO_SESSION = (
     "No Telegram session yet. The user must log in once, in their own terminal (never through this chat): "
-    + ("python scripts/tgdigest.py login - from the summarix-telegram folder" if td.IS_CLONE else "tgdigest login")
+    + (
+        "python scripts/tgdigest.py login - from the summarix-telegram folder"
+        if td.IS_CLONE
+        else "tgdigest login (started with uvx: uvx --from summarix-telegram tgdigest login)"
+    )
     + (", with SUMMARIX_HOME set to the same folder as for this server." if td.OWN_HOME else ".")
 )
 BUSY = "Busy: another tgdigest process (the CLI, the skill or another MCP server) is using the session. Try again in a minute."

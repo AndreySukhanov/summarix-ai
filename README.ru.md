@@ -306,6 +306,20 @@ Claude Desktop, в `claude_desktop_config.json`:
 claude mcp add summarix-telegram -e SUMMARIX_HOME=/path/to/folder -- summarix-mcp
 ```
 
+Из [реестра MCP](https://registry.modelcontextprotocol.io) (`io.github.AndreySukhanov/summarix-telegram`): клиент, который запускает локальные stdio-серверы, стартует его через `uvx` - один раз поставьте [uv](https://docs.astral.sh/uv/), остальное скачается при первом запуске. Один раз войдите: `uvx --from summarix-telegram tgdigest login` с тем же `SUMMARIX_HOME`:
+
+```json
+{
+  "mcpServers": {
+    "summarix-telegram": {
+      "command": "uvx",
+      "args": ["summarix-telegram"],
+      "env": { "SUMMARIX_HOME": "/path/to/folder" }
+    }
+  }
+}
+```
+
 | Инструмент | Что делает |
 |---|---|
 | `fetch_posts` | Посты за последние N часов из вашего списка, в выбранном стиле; большой выпуск приходит частями |

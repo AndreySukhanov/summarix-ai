@@ -402,11 +402,14 @@ def test_the_mcp_hint_follows_code_and_data_separately(monkeypatch):
 
     from summarix_telegram.scripts import mcp_server, tgdigest as td
 
-    monkeypatch.setattr(td, "OWN_HOME", True)
-    hint = importlib.reload(mcp_server).NO_SESSION
-    assert "scripts/tgdigest.py login" in hint and "SUMMARIX_HOME set to the same folder" in hint
-    monkeypatch.setattr(td, "IS_CLONE", False)
-    hint = importlib.reload(mcp_server).NO_SESSION
-    assert "tgdigest login, with SUMMARIX_HOME" in hint and "scripts/" not in hint
-    monkeypatch.undo()
-    importlib.reload(mcp_server)
+    try:
+        monkeypatch.setattr(td, "OWN_HOME", True)
+        hint = importlib.reload(mcp_server).NO_SESSION
+        assert "scripts/tgdigest.py login" in hint and "SUMMARIX_HOME set to the same folder" in hint
+        monkeypatch.setattr(td, "IS_CLONE", False)
+        hint = importlib.reload(mcp_server).NO_SESSION
+        assert "tgdigest login (started with uvx: uvx --from summarix-telegram tgdigest login)" in hint
+        assert "SUMMARIX_HOME set to the same folder" in hint and "scripts/" not in hint
+    finally:  # other tests hold this module: put the clone's hint back whatever happened above
+        monkeypatch.undo()
+        importlib.reload(mcp_server)

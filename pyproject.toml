@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "summarix-telegram"
-version = "1.2.0"
+version = "1.2.1"
 description = "Self-hosted Telegram channel summarizer: a bot, a Claude Code skill CLI and an MCP server that turn the channels you follow into one short digest, every point linked to its post."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -41,6 +41,8 @@ summarix-bot = "summarix_telegram.cli:bot"
 summarix-login = "summarix_telegram.cli:login"
 tgdigest = "summarix_telegram.scripts.tgdigest:main"
 summarix-mcp = "summarix_telegram.scripts.mcp_server:main"
+# `uvx summarix-telegram` - the way MCP clients and the MCP Registry start a PyPI server
+summarix-telegram = "summarix_telegram.scripts.mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["summarix_telegram*"]

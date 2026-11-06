@@ -1,6 +1,7 @@
 name: pypi
 
-# Publishes summarix-telegram to PyPI on a GitHub release, through trusted publishing: no token in the repo.
+# Publishes summarix-telegram to PyPI on a GitHub release, through trusted publishing: no token in the repo,
+# then lists the MCP server (server.json) in the official MCP Registry, also with no token (GitHub OIDC).
 # One-time setup on pypi.org by the owner: Publishing -> add a pending publisher with
 # project summarix-telegram, owner AndreySukhanov, repository summarix-telegram, workflow pypi.yml, environment pypi.
 
@@ -39,3 +40,42 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true  # a rerun after the registry step failed must not stop on files PyPI already has
+
+  mcp-registry:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.7  # pinned; never releases/latest
+      # SHA-256 of mcp-publisher_linux_amd64.tar.gz v1.8.7, computed and checked against the release checksums
+      # on 2026-11-06. Pinned here, so a swapped archive fails even if the release's checksums file is swapped too.
+      MCP_PUBLISHER_SHA256: 00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify mcp-publisher
+        run: |
+          base="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl -fsSL -o mcp-publisher_linux_amd64.tar.gz "$base/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher_linux_amd64.tar.gz" | sha256sum -c -
+          tar xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+      - name: Check server.json
+        run: ./mcp-publisher validate server.json
+      - name: Log in with GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+      - name: Publish to the MCP Registry
+        # PyPI may need a minute to serve the new version's description, which carries the mcp-name line.
+        # After a failure, ask the registry first: a publish that went through but lost its answer is done.
+        run: |
+          name=$(jq -r .name server.json)
+          version=$(jq -r .version server.json)
+          url="https://registry.modelcontextprotocol.io/v0.1/servers/$(jq -rn --arg n "$name" '$n|@uri')/versions/${version}"
+          for attempt in 1 2 3 4 5; do
+            if ./mcp-publisher publish; then exit 0; fi
+            if curl -fsS -o /dev/null "$url"; then echo "$name $version is already listed"; exit 0; fi
+            if [ "$attempt" -lt 5 ]; then echo "attempt $attempt failed, retrying in 60 s"; sleep 60; fi
+          done
+          exit 1
